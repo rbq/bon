@@ -1,0 +1,24 @@
+[printer]
+name = "EPSON_TM_m30III__USB_"
+candidates = ["EPSON_TM_m30III__USB_", "EPSON_TM_m30III"]
+
+[paper]
+width_mm = 80.0
+printable_width_pt = 204.3
+min_media_pt = 72.0
+max_media_height_pt = 5669.3
+
+[render]
+typst_bin = "typst"
+image_ppi = 203
+raster_ppi_multiplier = 2
+latex_engine = "auto"
+
+[cups]
+copies = 1
+dry_run = false
+
+[cups.options]
+Resolution = "203x203dpi"
+TmxPaperCut = "CutPerJob"
+TmxPaperReduction = "Off" # Off/Top/Bottom/Both

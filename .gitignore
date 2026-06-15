@@ -1,0 +1,6 @@
+/bin/bon
+/bin/bon.dwarf
+/lib/
+/.crystal/
+/coverage/
+*.dSYM/
