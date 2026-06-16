@@ -8,10 +8,10 @@ require "./typst"
 
 module Bon
   module Simulate
-    DEFAULT_PPI = 203
+    DEFAULT_PPI        = 203
     DEFAULT_MOCKUP_PPI = 406
-    PAPER_RGB = {245, 241, 224}
-    INK_RGB = {35, 35, 32}
+    PAPER_RGB          = {245, 241, 224}
+    INK_RGB            = {35, 35, 32}
 
     class Options
       property format : String
@@ -197,7 +197,7 @@ module Bon
                              when 2 then ((value.to_i + up.to_i) & 0xff).to_u8
                              when 3 then ((value.to_i + ((left.to_i + up.to_i) >> 1)) & 0xff).to_u8
                              when 4 then ((value.to_i + paeth(left.to_i, up.to_i, up_left.to_i)) & 0xff).to_u8
-                             else raise Error.new("Unsupported PNG filter type: #{filter_type}")
+                             else        raise Error.new("Unsupported PNG filter type: #{filter_type}")
                              end
         end
 

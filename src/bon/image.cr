@@ -142,7 +142,7 @@ module Bon
                              when 2 then ((value.to_i + up.to_i) & 0xff).to_u8
                              when 3 then ((value.to_i + ((left.to_i + up.to_i) >> 1)) & 0xff).to_u8
                              when 4 then ((value.to_i + paeth(left.to_i, up.to_i, up_left.to_i)) & 0xff).to_u8
-                             else raise Error.new("Unsupported PNG filter type: #{filter_type}")
+                             else        raise Error.new("Unsupported PNG filter type: #{filter_type}")
                              end
         end
 
