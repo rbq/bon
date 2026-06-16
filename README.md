@@ -13,11 +13,13 @@ mise install
 Pinned development tools:
 
 - Crystal `1.20.2`
+- TinyTeX `2026.06`
 - Typst `0.14.2`
 
 Runtime tools:
 
 - CUPS commands: `lpstat` and `lp`
+- Optional CUPS command: `lpoptions` for driver option validation
 - Ghostscript `gs` when center-cropping/rasterizing to printer dots is needed
 - Typst for `.typ` inputs, JPEG simulation, and image inputs that need center-cropping
 - Optional LaTeX tools for `.tex` inputs: `latexmk`, `tectonic`, or `pdflatex`
@@ -102,7 +104,7 @@ If no files are passed to the print command, `bon` fails with usage help.
 
 Simulate options:
 
-- `-f, --format FORMAT` - output format, for example `png` or `pdf`.
+- `-f, --format FORMAT` - output format, `png` or `pdf`.
 - `--paper-mm N` - simulated physical paper width in millimeters.
 - `--content-mm N` - override printed content width in millimeters.
 - `--ppi N` - content render PPI and image physical-size PPI.
@@ -115,6 +117,15 @@ Simulate options:
 - `--background-tint HEX` - paper background tint as `#RRGGBB` or `RRGGBB`.
 - `--foreground-color HEX` - mockup foreground color as `#RRGGBB` or `RRGGBB`.
 - `--foreground-fade N` - mockup foreground opacity from `0.0` to `1.0`.
+
+Config options:
+
+- `-g, --global` - with `config edit`, edit the global config instead of local `./config.toml`.
+
+Init options:
+
+- `--global` - write the global config instead of local `./config.toml`.
+- `--force` - overwrite an existing config file.
 
 ## Configuration
 
@@ -162,7 +173,7 @@ TmxPaperCut = "CutPerPage"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `simulate.foreground_color` and `simulate.foreground_fade` control the mockup ink color and opacity while preserving the current look at their defaults. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `render.typst_mode` is `pdf` by default, keeping Typst/LaTeX crop output as PDF; `raster` uses the Ghostscript raster/downsample path for Typst inputs that need cropping. `render.raster_ppi_multiplier` controls the high-resolution intermediate raster scale in raster mode and must be positive. `render.latex_engine` must be `auto`, `latexmk`, `tectonic`, or `pdflatex`; `auto` tries those tools in that order where applicable. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `simulate.foreground_color` and `simulate.foreground_fade` control the mockup ink color and opacity while preserving the current look at their defaults. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 
@@ -172,11 +183,12 @@ For each input, `bon`:
 2. Creates a temporary working directory outside the project tree.
 3. Converts Typst and LaTeX inputs to PDF.
 4. Sends PNG/JPEG inputs directly to CUPS when they fit the printable width, based on `render.image_ppi`.
-5. Reads the PDF first page `/CropBox` or `/MediaBox`, or computes image physical size from pixels and PPI.
+5. Scans discoverable PDF `/CropBox` and `/MediaBox` entries on a best-effort basis, or computes image physical size from pixels and PPI. This is not a full PDF parser, so compressed/object-stream page boxes may not be visible.
 6. Fails if the document is wider than the physical paper width.
-7. Center-crops pages wider than printable width unless `--no-crop` is set. Cropped PDFs are rasterized at `render.image_ppi * render.raster_ppi_multiplier`, then downsampled to a 1-bit PNG at native `render.image_ppi`, with dimensions verified before printing.
-8. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
-9. Runs `lp` with the configured queue, copies, options, and final document path.
+7. Center-crops pages wider than printable width unless `--no-crop` is set. Default PDF/Typst/LaTeX cropping uses Ghostscript `pdfwrite` and keeps the print artifact as PDF; `render.typst_mode = "raster"` uses the raster/downsample path for Typst crops.
+8. Fails if the final document height exceeds `paper.max_media_height_pt`.
+9. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
+10. Runs `lp` with the configured queue, copies, options, and final document path.
 
 `bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags.
 

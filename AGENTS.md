@@ -9,7 +9,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Use `mise` as the entry point for reproducibility.
 - Use generated mise bin stubs when available.
 - Run `mise generate task-stubs` whenever mise task names are added, removed, or renamed.
-- Required tools are pinned in `.mise.toml`: Crystal `1.20.2` and Typst `0.14.2`.
+- Required tools are pinned in `.mise.toml`: Crystal `1.20.2`, TinyTeX `2026.06`, and Typst `0.14.2`.
 - Main development commands are `mise run spec`, `mise run build`, and `mise run run -- --dry-run <file>`.
 - Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason.
 
@@ -53,6 +53,7 @@ When modifying the application, keep all of the following in sync:
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
 - Config `[cups]` is reserved for bon-controlled CUPS behavior such as `copies` and `dry_run`; arbitrary CUPS/driver options live under `[cups.options]` and are passed as `lp -o` values. Empty `[cups.options]` string values remove inherited/default options.
 - PDF inputs pass through unchanged before width handling.
+- PDF size detection scans discoverable `/CropBox` and `/MediaBox` entries on a best-effort basis, uses maximum discovered width/height for conservative validation, and is not a full parser for compressed/object-stream boxes.
 - Typst inputs run `typst compile --root <root> <source> <temp>.pdf`.
 - Image inputs use `render.image_ppi` to determine physical size and are sent directly to CUPS when no center-crop is needed.
 - Image inputs that need center-cropping fall back to a temporary Typst wrapper PDF and Ghostscript crop.
@@ -61,3 +62,5 @@ When modifying the application, keep all of the following in sync:
 - Simulated mockups default to foreground color `#232320` and foreground fade `1.0`; keep those defaults to preserve the established mockup look.
 - LaTeX `auto` mode tries `latexmk -pdf`, then `tectonic`, then `pdflatex`.
 - Width policy: pages wider than physical paper width fail; pages wider than printable width are center-cropped with Ghostscript unless `--no-crop` is set.
+- Default PDF/Typst/LaTeX crops use Ghostscript `pdfwrite` and remain PDF; the Typst raster/downsample path is only for `render.typst_mode = "raster"`.
+- Height policy: documents taller than `paper.max_media_height_pt` fail instead of being clamped to CUPS media height.
