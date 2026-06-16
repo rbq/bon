@@ -101,6 +101,83 @@ describe Bon::Document do
     end
   end
 
+  it "prepares LaTeX sources as PDFs by default" do
+    with_document_temp_dir do |dir|
+      source = File.join(dir, "receipt.tex")
+      fake_pdflatex = File.join(dir, "pdflatex")
+      args = File.join(dir, "pdflatex-args.txt")
+      output = IO::Memory.new
+      error = IO::Memory.new
+
+      File.write(source, "\\documentclass{article}\\begin{document}Hello\\end{document}\n")
+      File.write(fake_pdflatex, fake_pdflatex_script(args, 180.0, 300.0))
+      File.chmod(fake_pdflatex, 0o755)
+
+      with_document_env({"PATH" => "#{dir}:#{ENV["PATH"]?}"}) do
+        config = Bon::Config.new(latex_engine: "pdflatex")
+
+        prepared = Bon::Document.prepare(source, dir, 1, config, false, false, output, error)
+
+        prepared.path.should eq(File.join(dir, "001-receipt.pdf"))
+        prepared.size.width.should eq(180.0)
+        prepared.size.height.should eq(300.0)
+        pdflatex_args = File.read(args)
+        pdflatex_args.should contain("-output-directory")
+        output.to_s.should_not contain("pngmono")
+        output.to_s.should_not contain("pnggray")
+        output.to_s.should_not contain("001-receipt-print.png")
+      end
+    end
+  end
+
+  it "center-crops wide LaTeX PDFs with Ghostscript pdfwrite" do
+    with_document_temp_dir do |dir|
+      source = File.join(dir, "receipt.tex")
+      fake_pdflatex = File.join(dir, "pdflatex")
+      fake_gs = File.join(dir, "gs")
+      pdflatex_args = File.join(dir, "pdflatex-args.txt")
+      gs_args = File.join(dir, "gs-args.txt")
+      output = IO::Memory.new
+      error = IO::Memory.new
+
+      File.write(source, "\\documentclass{article}\\begin{document}Hello\\end{document}\n")
+      File.write(fake_pdflatex, fake_pdflatex_script(pdflatex_args, 226.772, 300.0))
+      File.chmod(fake_pdflatex, 0o755)
+      File.write(fake_gs, <<-SH)
+        #!/bin/sh
+        printf '%s\n' "$@" > "$BON_GS_ARGS"
+        output=""
+        for arg do
+          case "$arg" in
+            -sOutputFile=*) output="${arg#-sOutputFile=}" ;;
+          esac
+        done
+        cat > "$output" <<'PDF'
+        %PDF-1.7
+        1 0 obj <</MediaBox [0 0 204.3 300]>> endobj
+        PDF
+        SH
+      File.chmod(fake_gs, 0o755)
+
+      with_document_env({"PATH" => "#{dir}:#{ENV["PATH"]?}", "BON_GS_ARGS" => gs_args}) do
+        config = Bon::Config.new(latex_engine: "pdflatex")
+
+        prepared = Bon::Document.prepare(source, dir, 1, config, false, true, output, error)
+
+        prepared.path.should eq(File.join(dir, "001-receipt-print.pdf"))
+        prepared.size.width.should eq(204.3)
+        prepared.size.height.should eq(300.0)
+        output.to_s.should contain("pdflatex -interaction=nonstopmode")
+        output.to_s.should contain("-sDEVICE=pdfwrite")
+        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.3")
+        output.to_s.should_not contain("pngmono")
+        output.to_s.should_not contain("pnggray")
+        output.to_s.should_not contain("001-receipt-print.png")
+        File.read(gs_args).should contain("<</PageOffset [-11.236 0]>> setpagedevice")
+      end
+    end
+  end
+
   it "uses the legacy Typst raster pipeline only when configured" do
     with_document_temp_dir do |dir|
       source = File.join(dir, "receipt.typ")
@@ -157,6 +234,33 @@ describe Bon::Document do
       end
     end
   end
+end
+
+private def fake_pdflatex_script(args_path : String, width : Float64, height : Float64) : String
+  <<-SH
+    #!/bin/sh
+    printf '%s\n' "$@" > #{args_path}
+    outdir="."
+    source=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -output-directory)
+          shift
+          outdir="$1"
+          ;;
+        *)
+          source="$1"
+          ;;
+      esac
+      shift
+    done
+    basename="${source##*/}"
+    basename="${basename%.*}"
+    cat > "$outdir/$basename.pdf" <<'PDF'
+    %PDF-1.7
+    1 0 obj <</MediaBox [0 0 #{width} #{height}]>> endobj
+    PDF
+    SH
 end
 
 private def with_document_temp_dir(& : String ->) : Nil

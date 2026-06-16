@@ -188,6 +188,38 @@ describe Bon::Cli do
     end
   end
 
+  it "dry-runs LaTeX printing through a PDF-first cropped CUPS job" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "receipt.tex")
+      File.write(source, "\\documentclass{article}\\begin{document}Hello\\end{document}\n")
+      File.write(File.join(dir, "config.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["--dry-run", source], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          output = stdout.to_s
+          output.should contain("pdflatex -interaction=nonstopmode")
+          output.should contain("gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite")
+          output.should contain("-dDEVICEWIDTHPOINTS=204.3")
+          output.should contain("lp -d EPSON_TM_m30III -n 1")
+          output.should contain("-o media=Custom.204.3x300")
+          output.should contain("-o Resolution=203x203dpi")
+          output.should contain("001-receipt-print.pdf")
+          output.should_not contain("001-receipt-print.png")
+          output.should_not contain("pngmono")
+          output.should_not contain("pnggray")
+        end
+      end
+    end
+  end
+
   it "rejects unknown printer subcommands" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new
@@ -228,6 +260,31 @@ private def install_fake_print_tools(dir : String) : Nil
     PDF
     SH
   File.chmod(File.join(dir, "typst"), 0o755)
+
+  File.write(File.join(dir, "pdflatex"), <<-SH)
+    #!/bin/sh
+    outdir="."
+    source=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -output-directory)
+          shift
+          outdir="$1"
+          ;;
+        *)
+          source="$1"
+          ;;
+      esac
+      shift
+    done
+    basename="${source##*/}"
+    basename="${basename%.*}"
+    cat > "$outdir/$basename.pdf" <<'PDF'
+    %PDF-1.7
+    1 0 obj <</MediaBox [0 0 226.772 300]>> endobj
+    PDF
+    SH
+  File.chmod(File.join(dir, "pdflatex"), 0o755)
 
   File.write(File.join(dir, "gs"), <<-SH)
     #!/bin/sh
