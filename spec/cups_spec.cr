@@ -63,6 +63,32 @@ describe Bon::Cups do
     options["fit-to-page"].should eq("false")
   end
 
+  it "cuts after each page by default" do
+    config = Bon::Config.new
+    options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)
+
+    options["TmxPaperCut"].should eq("CutPerPage")
+  end
+
+  it "lets config and CLI options override paper cutting" do
+    config = Bon::Config.new(cups_paper_cut: "NoCut")
+
+    options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)
+    options["TmxPaperCut"].should eq("NoCut")
+
+    overridden = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {"TmxPaperCut" => "CutPerJob"})
+    overridden["TmxPaperCut"].should eq("CutPerJob")
+  end
+
+  it "cuts each page by default while allowing CUPS option overrides" do
+    config = Bon::Config.new
+    options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)
+    options["TmxPaperCut"].should eq("CutPerPage")
+
+    overridden = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {"TmxPaperCut" => "CutPerJob"})
+    overridden["TmxPaperCut"].should eq("CutPerJob")
+  end
+
   it "lets CLI options override fit-to-page" do
     config = Bon::Config.new
     options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {"fit-to-page" => "true"})
@@ -115,7 +141,7 @@ describe Bon::Cups do
       "media"       => "Custom.204.296x113.498",
       "ppi"         => "203",
       "fit-to-page" => "false",
-      "TmxPaperCut" => "CutPerJob",
+      "TmxPaperCut" => "CutPerPage",
     }
 
     Bon::Cups.validate_against!("EPSON_TM_m30III__USB_", options, supported)

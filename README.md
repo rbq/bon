@@ -120,14 +120,14 @@ latex_engine = "auto"
 [cups]
 copies = 1
 dry_run = false
+paper_cut = "CutPerPage"
 
 [cups.options]
 Resolution = "203x203dpi"
-TmxPaperCut = "CutPerJob"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 

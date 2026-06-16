@@ -17,8 +17,8 @@ latex_engine = "auto"
 [cups]
 copies = 1
 dry_run = false
+paper_cut = "CutPerPage" # NoCut/CutPerJob/CutPerPage
 
 [cups.options]
 Resolution = "203x203dpi"
-TmxPaperCut = "CutPerJob"
 TmxPaperReduction = "Off" # Off/Top/Bottom/Both

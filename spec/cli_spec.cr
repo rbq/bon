@@ -245,7 +245,7 @@ describe Bon::Cli do
           output.should contain("lp -d EPSON_TM_m30III -n 1")
           output.should contain("-o media=Custom.204.3x300")
           output.should contain("-o Resolution=203x203dpi")
-          output.should contain("-o TmxPaperCut=CutPerJob")
+          output.should contain("-o TmxPaperCut=CutPerPage")
           output.should contain("-o TmxPaperReduction=Off")
           output.should contain("001-receipt-print.pdf")
           output.should_not contain("001-receipt-print.png")
@@ -310,7 +310,7 @@ private def install_fake_print_tools(dir : String) : Nil
     printf '%s\n' 'PageSize/Media Size: *RP80x200 RP80x2000 Custom.WIDTHxHEIGHT'
     printf '%s\n' 'Resolution/Resolution: *203x203dpi'
     printf '%s\n' 'TmxPaperReduction/Paper Reduction: *Off Top Bottom Both'
-    printf '%s\n' 'TmxPaperCut/Paper Cut: NoCut *CutPerJob CutPerPage'
+    printf '%s\n' 'TmxPaperCut/Paper Cut: NoCut CutPerJob *CutPerPage'
     SH
   File.chmod(File.join(dir, "lpoptions"), 0o755)
 

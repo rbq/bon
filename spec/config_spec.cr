@@ -11,6 +11,7 @@ describe Bon::Toml do
       [cups]
       copies = 2
       dry_run = true
+      paper_cut = "NoCut"
 
       [paper]
       width_mm = 80.0
@@ -20,6 +21,7 @@ describe Bon::Toml do
     values["printer.candidates"].should eq(["A", "B"])
     values["cups.copies"].should eq(2_i64)
     values["cups.dry_run"].should eq(true)
+    values["cups.paper_cut"].should eq("NoCut")
     values["paper.width_mm"].should eq(80.0)
   end
 end
@@ -59,6 +61,13 @@ describe Bon::Config do
     Bon::Config.default_toml.should contain("typst_mode = \"pdf\"")
   end
 
+  it "defaults thermal paper cutting to after each page" do
+    defaults = Bon::Config.default_toml
+
+    defaults.should contain("paper_cut = \"CutPerPage\"")
+    defaults.should_not contain("TmxPaperCut")
+  end
+
   it "does not force the USB printer in generated TOML defaults" do
     defaults = Bon::Config.default_toml
 
@@ -75,5 +84,24 @@ describe Bon::Config do
     TOML
 
     config.printer_name.should be_nil
+  end
+
+  it "allows disabling the first-class paper cut option" do
+    config = Bon::Config.new
+
+    config.overlay(Bon::Toml.parse(<<-TOML))
+      [cups]
+      paper_cut = ""
+    TOML
+
+    config.cups_paper_cut.should be_nil
+  end
+
+  it "rejects unknown paper cut values" do
+    config = Bon::Config.new(cups_paper_cut: "Sometimes")
+
+    expect_raises(Bon::Error, /cups.paper_cut/) do
+      config.validate!
+    end
   end
 end
