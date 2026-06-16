@@ -15,10 +15,10 @@ describe Bon::Cli do
     help = stdout.to_s
     help.should contain("Usage: bon [print] [options] FILE...")
     help.should contain("bon printer [list]")
-    help.should contain("bon config <check|show>")
+    help.should contain("bon config <check|show|edit>")
     help.should contain("print      Print one or more files")
     help.should contain("printer    List discovered CUPS printer queues")
-    help.should contain("config     Validate or show the effective configuration")
+    help.should contain("config     Validate, show, or edit configuration")
   end
 
   it "documents printer subcommands in printer help" do
@@ -43,9 +43,75 @@ describe Bon::Cli do
     status.should eq(0)
     stderr.to_s.should eq("")
     help = stdout.to_s
-    help.should contain("Usage: bon config <check|show>")
+    help.should contain("Usage: bon config <check|show|edit> [options]")
     help.should contain("check      Validate config files")
     help.should contain("show       Show the effective merged config")
+    help.should contain("edit       Open the config file")
+    help.should contain("-g, --global")
+  end
+
+  it "edits the local config and validates it after the editor exits" do
+    with_cli_temp_dir do |dir|
+      install_fake_editor(dir, "printf '%s\n' '[cups]' 'copies = 3' >> \"$1\"")
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "EDITOR" => "bon-test-editor", "VISUAL" => "", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          path = File.join(Dir.current, "config.toml")
+          status = Bon::Cli.run(["config", "edit"], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          stdout.to_s.should contain("Config OK: #{path}")
+          File.exists?(path).should be_true
+          File.read(path).should contain("copies = 3")
+        end
+      end
+    end
+  end
+
+  it "edits the global config with --global and -g" do
+    ["--global", "-g"].each do |flag|
+      with_cli_temp_dir do |dir|
+        install_fake_editor(dir, "printf '%s\n' '[paper]' 'width_mm = 58.0' >> \"$1\"")
+        xdg_config = File.join(dir, "xdg")
+        global_config = File.join(xdg_config, "bon", "config.toml")
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+
+        with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "EDITOR" => "bon-test-editor", "VISUAL" => "", "XDG_CONFIG_HOME" => xdg_config}) do
+          Dir.cd(dir) do
+            status = Bon::Cli.run(["config", "edit", flag], stdout, stderr)
+
+            status.should eq(0)
+            stderr.to_s.should eq("")
+            stdout.to_s.should contain("Config OK: #{global_config}")
+            File.exists?(global_config).should be_true
+            File.read(global_config).should contain("width_mm = 58.0")
+            File.exists?(File.join(dir, "config.toml")).should be_false
+          end
+        end
+      end
+    end
+  end
+
+  it "fails config edit when the edited config is invalid" do
+    with_cli_temp_dir do |dir|
+      install_fake_editor(dir, "printf '%s\n' '[paper]' 'width_mm = -1' >> \"$1\"")
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "EDITOR" => "bon-test-editor", "VISUAL" => "", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["config", "edit"], stdout, stderr)
+
+          status.should eq(2)
+          stdout.to_s.should eq("")
+          stderr.to_s.should contain("error: paper.width_mm must be positive")
+        end
+      end
+    end
   end
 
   it "checks config files and reports source usage" do
@@ -319,6 +385,15 @@ private def install_fake_lpstat(dir : String) : Nil
         exit 2
         ;;
     esac
+    SH
+  File.chmod(path, 0o755)
+end
+
+private def install_fake_editor(dir : String, body : String) : Nil
+  path = File.join(dir, "bon-test-editor")
+  File.write(path, <<-SH)
+    #!/bin/sh
+    #{body}
     SH
   File.chmod(path, 0o755)
 end

@@ -93,12 +93,12 @@ module Bon
         parser.banner = <<-TEXT
           Usage: bon [print] [options] FILE...
                  bon printer [list]
-                 bon config <check|show>
+                 bon config <check|show|edit>
 
           Commands:
             print      Print one or more files. This is the default command.
             printer    List discovered CUPS printer queues.
-            config     Validate or show the effective configuration.
+            config     Validate, show, or edit configuration.
 
           Print options:
           TEXT
@@ -160,17 +160,20 @@ module Bon
 
     private def run_config(argv : Array(String)) : Int32
       show_help = false
+      use_global = false
       subcommands = [] of String
       parser = OptionParser.new do |parser|
         parser.banner = <<-TEXT
-          Usage: bon config <check|show>
+          Usage: bon config <check|show|edit> [options]
 
           Commands:
             check      Validate config files and show which sources are used.
             show       Show the effective merged config, including defaults.
+            edit       Open the config file in $VISUAL, $EDITOR, or vi, then validate it.
 
           Config options:
           TEXT
+        parser.on("-g", "--global", "Edit the global bon config") { use_global = true }
         parser.on("-h", "--help", "Show help") { show_help = true }
         parser.unknown_args do |before_dash, after_dash|
           subcommands.concat(before_dash)
@@ -194,9 +197,13 @@ module Bon
 
       case subcommand
       when "check"
+        raise Error.new("--global can only be used with bon config edit") if use_global
         run_config_check
       when "show"
+        raise Error.new("--global can only be used with bon config edit") if use_global
         run_config_show
+      when "edit"
+        run_config_edit(use_global)
       else
         raise Error.new("Unknown config command: #{subcommand}")
       end
@@ -218,6 +225,42 @@ module Bon
       loaded = Config.load_with_sources
       @output_io.print(loaded.config.to_effective_toml)
       0
+    end
+
+    private def run_config_edit(use_global : Bool) : Int32
+      path = if use_global
+               Config.global_path || raise Error.new("Could not determine global config path")
+             else
+               File.join(Dir.current, "config.toml")
+             end
+
+      ensure_config_file(path)
+      editor = default_editor
+      command = "#{editor} #{Command.shell_escape(path)}"
+      status = Process.run(command, shell: true, input: STDIN, output: @output_io, error: @error_io)
+      raise Error.new("Editor failed: #{editor}") unless status.success?
+
+      Config.validate_file!(path)
+      @output_io.puts("Config OK: #{path}")
+      0
+    end
+
+    private def ensure_config_file(path : String) : Nil
+      return if File.exists?(path)
+
+      parent = File.dirname(path)
+      FileUtils.mkdir_p(parent) unless Dir.exists?(parent)
+      File.write(path, Config.default_toml)
+    end
+
+    private def default_editor : String
+      visual = ENV["VISUAL"]?
+      return visual if visual && !visual.empty?
+
+      editor = ENV["EDITOR"]?
+      return editor if editor && !editor.empty?
+
+      "vi"
     end
 
     private def print_config_sources(statuses : Array(ConfigSourceStatus)) : Nil
