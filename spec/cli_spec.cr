@@ -25,6 +25,8 @@ describe Bon::Cli do
     help.should contain("printer    List discovered CUPS printer queues")
     help.should contain("config     Validate, show, or edit configuration")
     help.should contain("init       Write a default config file")
+    help.should contain("--raster-threshold=N")
+    help.should contain("--raster-dither=MODE")
   end
 
   it "documents the simulate alias in simulate help" do

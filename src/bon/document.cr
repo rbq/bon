@@ -134,7 +134,7 @@ module Bon
       target_width_px = PDF.points_to_pixels(target_width, config.image_ppi)
       target_height_px = PDF.points_to_pixels(size.height, config.image_ppi)
       output = File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}-print.png")
-      Image.downsample_center_crop_to_mono(raster, output, target_width_px, target_height_px)
+      Image.downsample_center_crop_to_mono(raster, output, target_width_px, target_height_px, config.raster_threshold, config.raster_dither)
       PDF.verify_png_size(output, target_width_px, target_height_px)
 
       Prepared.new(output, PDF::PageSize.new(

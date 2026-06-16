@@ -172,6 +172,8 @@ module Bon
     property typst_mode : String
     property image_ppi : Int32
     property raster_ppi_multiplier : Int32
+    property raster_threshold : Float64
+    property raster_dither : String
     property latex_engine : String
     property cups_copies : Int32
     property cups_dry_run : Bool
@@ -190,6 +192,8 @@ module Bon
                    @typst_mode = "pdf",
                    @image_ppi = 203,
                    @raster_ppi_multiplier = 2,
+                   @raster_threshold = 0.125,
+                   @raster_dither = "none",
                    @latex_engine = "auto",
                    @cups_copies = 1,
                    @cups_dry_run = false,
@@ -328,6 +332,8 @@ module Bon
         io << "typst_mode = \"#{toml_escape(@typst_mode)}\"\n"
         io << "image_ppi = #{@image_ppi}\n"
         io << "raster_ppi_multiplier = #{@raster_ppi_multiplier}\n"
+        io << "raster_threshold = #{@raster_threshold}\n"
+        io << "raster_dither = \"#{toml_escape(@raster_dither)}\"\n"
         io << "latex_engine = \"#{toml_escape(@latex_engine)}\"\n\n"
 
         io << "[simulate]\n"
@@ -375,6 +381,10 @@ module Bon
           @image_ppi = expect_int(key, value, source)
         when "render.raster_ppi_multiplier"
           @raster_ppi_multiplier = expect_int(key, value, source)
+        when "render.raster_threshold"
+          @raster_threshold = expect_number(key, value, source)
+        when "render.raster_dither"
+          @raster_dither = expect_string(key, value, source)
         when "render.latex_engine"
           @latex_engine = expect_string(key, value, source)
         when "simulate.background_tint"
@@ -417,6 +427,9 @@ module Bon
       raise Error.new("render.image_ppi must be positive") unless @image_ppi > 0
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
       validate_finite!("render.raster_ppi_multiplier", @raster_ppi_multiplier)
+      validate_finite!("render.raster_threshold", @raster_threshold)
+      raise Error.new("render.raster_threshold must be between 0.0 and 1.0") unless @raster_threshold >= 0.0 && @raster_threshold <= 1.0
+      raise Error.new("render.raster_dither must be either \"none\" or \"ordered\"") unless {"none", "ordered"}.includes?(@raster_dither)
       raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
       raise Error.new("simulate.foreground_color must be a hex RGB value like #232320") unless hex_rgb?(@simulate_foreground_color)
       raise Error.new("simulate.foreground_fade must be between 0.0 and 1.0") unless @simulate_foreground_fade >= 0.0 && @simulate_foreground_fade <= 1.0

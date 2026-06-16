@@ -180,7 +180,7 @@ module Bon
       output
     end
 
-    def self.crop_to_raster(source : String, output : String, source_size : PageSize, target_size : PageSize, ppi : Int32, multiplier : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.crop_to_raster(source : String, output : String, source_size : PageSize, target_size : PageSize, ppi : Int32, multiplier : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, threshold = 0.125, dither = "none") : String
       gs = Command.require_executable("gs")
       if multiplier <= 1
         Command.run(
@@ -204,7 +204,7 @@ module Bon
         output_io,
         error_io
       )
-      downsample_grayscale_to_mono(high_output, output, multiplier) if File.exists?(high_output)
+      downsample_grayscale_to_mono(high_output, output, multiplier, threshold, dither) if File.exists?(high_output)
       output
     end
 
@@ -230,7 +230,7 @@ module Bon
       ]
     end
 
-    def self.downsample_grayscale_to_mono(source : String, output : String, multiplier : Int32) : Nil
+    def self.downsample_grayscale_to_mono(source : String, output : String, multiplier : Int32, threshold = 0.125, dither = "none") : Nil
       raster = read_grayscale_png(source)
       unless raster.width % multiplier == 0 && raster.height % multiplier == 0
         raise Error.new("High-resolution raster size #{raster.width}x#{raster.height}px is not divisible by raster_ppi_multiplier=#{multiplier}")
@@ -238,7 +238,7 @@ module Bon
 
       target_width = raster.width // multiplier
       target_height = raster.height // multiplier
-      threshold = 255 * multiplier * multiplier // 8
+      samples = multiplier * multiplier
       mono = Bytes.new(target_width * target_height)
 
       target_height.times do |y|
@@ -250,11 +250,17 @@ module Bon
               darkness += 255 - raster.pixels[source_row + x * multiplier + dx].to_i
             end
           end
-          mono[y * target_width + x] = darkness >= threshold ? 0_u8 : 255_u8
+          mono[y * target_width + x] = threshold_to_mono(darkness, samples, x, y, threshold, dither)
         end
       end
 
       write_mono_png(output, target_width, target_height, mono)
+    end
+
+    def self.threshold_to_mono(darkness : Int32, samples : Int32, x : Int32, y : Int32, threshold : Float64, dither : String) : UInt8
+      coverage = darkness.to_f64 / (255.0 * samples)
+      cutoff = dither == "ordered" ? ordered_cutoff(threshold, x, y) : threshold
+      coverage >= cutoff ? 0_u8 : 255_u8
     end
 
     def self.points_to_pixels(points : Float64, ppi : Int32) : Int32
@@ -275,6 +281,17 @@ module Bon
       ext = File.extname(output)
       base = ext.empty? ? output : output[0...-ext.size]
       "#{base}-#{ppi}ppi#{ext.empty? ? ".png" : ext}"
+    end
+
+    private def self.ordered_cutoff(threshold : Float64, x : Int32, y : Int32) : Float64
+      matrix = {
+        {0, 8, 2, 10},
+        {12, 4, 14, 6},
+        {3, 11, 1, 9},
+        {15, 7, 13, 5},
+      }
+      offset = ((matrix[y % 4][x % 4] + 0.5) / 16.0) - 0.5
+      (threshold + offset).clamp(0.0, 1.0)
     end
 
     private def self.read_grayscale_png(path : String) : GrayscaleRaster

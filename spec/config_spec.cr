@@ -42,6 +42,8 @@ describe Bon::Config do
       [render]
       typst_mode = "raster"
       raster_ppi_multiplier = 3
+      raster_threshold = 0.5
+      raster_dither = "ordered"
 
       [simulate]
       background_tint = "c8d0ff"
@@ -57,6 +59,8 @@ describe Bon::Config do
     config.printable_width_pt.should eq(149.1)
     config.typst_mode.should eq("raster")
     config.raster_ppi_multiplier.should eq(3)
+    config.raster_threshold.should eq(0.5)
+    config.raster_dither.should eq("ordered")
     config.simulate_background_tint.should eq("c8d0ff")
     config.simulate_foreground_color.should eq("#112233")
     config.simulate_foreground_fade.should eq(0.5)
@@ -64,8 +68,10 @@ describe Bon::Config do
     config.cups_options["SomeFlag"].should eq("true")
   end
 
-  it "includes the raster PPI multiplier in generated TOML defaults" do
+  it "includes raster controls in generated TOML defaults" do
     Bon::Config.default_toml.should contain("raster_ppi_multiplier = 2")
+    Bon::Config.default_toml.should contain("raster_threshold = 0.125")
+    Bon::Config.default_toml.should contain("raster_dither = \"none\"")
   end
 
   it "defaults Typst input preparation to PDF mode" do
@@ -185,6 +191,16 @@ describe Bon::Config do
 
     expect_raises(Bon::Error, /render.latex_engine/) do
       Bon::Config.new(latex_engine: "xelatex").validate!
+    end
+  end
+
+  it "rejects invalid raster controls" do
+    expect_raises(Bon::Error, /render.raster_threshold/) do
+      Bon::Config.new(raster_threshold: 1.1).validate!
+    end
+
+    expect_raises(Bon::Error, /render.raster_dither/) do
+      Bon::Config.new(raster_dither: "floyd-steinberg").validate!
     end
   end
 

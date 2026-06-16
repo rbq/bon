@@ -123,6 +123,15 @@ describe Bon::PDF do
       end
     end
   end
+
+  it "applies configurable raster threshold and ordered dithering" do
+    darkness = 64
+
+    Bon::PDF.threshold_to_mono(darkness, 1, 0, 0, 0.5, "none").should eq(255_u8)
+    Bon::PDF.threshold_to_mono(darkness, 1, 0, 0, 0.25, "none").should eq(0_u8)
+    Bon::PDF.threshold_to_mono(darkness, 1, 0, 0, 0.5, "ordered").should eq(0_u8)
+    Bon::PDF.threshold_to_mono(darkness, 1, 3, 0, 0.5, "ordered").should eq(255_u8)
+  end
 end
 
 private def write_gray_png(path : String, width : Int32, height : Int32, pixels : Bytes) : Nil

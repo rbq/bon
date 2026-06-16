@@ -50,7 +50,7 @@ module Bon
       )
     end
 
-    def self.downsample_center_crop_to_mono(source : String, output : String, target_width : Int32, target_height : Int32) : Nil
+    def self.downsample_center_crop_to_mono(source : String, output : String, target_width : Int32, target_height : Int32, threshold = 0.125, dither = "none") : Nil
       raise Error.new("Target raster dimensions must be positive") unless target_width > 0 && target_height > 0
 
       raster = read_png(source)
@@ -78,7 +78,7 @@ module Bon
             end
           end
 
-          mono[y * target_width + x] = darkness >= 255 * samples // 8 ? 0_u8 : 255_u8
+          mono[y * target_width + x] = PDF.threshold_to_mono(darkness, samples, x, y, threshold, dither)
         end
       end
 

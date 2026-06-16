@@ -129,6 +129,8 @@ module Bon
         end
         parser.on("--paper-mm=N", "Physical paper width in millimeters") { |value| config.paper_width_mm = parse_float(value, "--paper-mm") }
         parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = parse_float(value, "--printable-width-pt") }
+        parser.on("--raster-threshold=N", "Raster darkness cutoff from 0.0 to 1.0") { |value| config.raster_threshold = parse_float(value, "--raster-threshold") }
+        parser.on("--raster-dither=MODE", "Raster dithering: none or ordered") { |value| config.raster_dither = value }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
         parser.on("--version", "Show version") { @show_version = true }
