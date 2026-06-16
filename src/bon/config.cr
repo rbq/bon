@@ -398,8 +398,10 @@ module Bon
     end
 
     def validate! : Nil
+      validate_finite!("paper.width_mm", @paper_width_mm)
       raise Error.new("paper.width_mm must be positive") unless @paper_width_mm > 0
       if printable_width = @printable_width_pt
+        validate_finite!("paper.printable_width_pt", printable_width)
         raise Error.new("paper.printable_width_pt must be positive, or 0 for automatic sizing") unless printable_width > 0
       end
       if printable_width_pt > paper_width_pt + 0.1
@@ -407,9 +409,14 @@ module Bon
       end
       raise Error.new("paper.min_media_pt must be positive") unless @min_media_pt > 0
       raise Error.new("paper.max_media_height_pt must be positive") unless @max_media_height_pt > 0
+      validate_finite!("paper.min_media_pt", @min_media_pt)
+      validate_finite!("paper.max_media_height_pt", @max_media_height_pt)
       raise Error.new("render.typst_mode must be either \"pdf\" or \"raster\"") unless {"pdf", "raster"}.includes?(@typst_mode)
+      raise Error.new("render.typst_bin must not be empty") if @typst_bin.empty?
+      raise Error.new("render.latex_engine must be one of auto, latexmk, tectonic, or pdflatex") unless {"auto", "latexmk", "tectonic", "pdflatex"}.includes?(@latex_engine)
       raise Error.new("render.image_ppi must be positive") unless @image_ppi > 0
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
+      validate_finite!("render.raster_ppi_multiplier", @raster_ppi_multiplier)
       raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
       raise Error.new("simulate.foreground_color must be a hex RGB value like #232320") unless hex_rgb?(@simulate_foreground_color)
       raise Error.new("simulate.foreground_fade must be between 0.0 and 1.0") unless @simulate_foreground_fade >= 0.0 && @simulate_foreground_fade <= 1.0
@@ -436,6 +443,8 @@ module Bon
     private def expect_int(key : String, value : TomlScalar, source : String) : Int32
       int = value.as?(Int64) || raise Error.new("Config value #{key} in #{source} must be an integer")
       int.to_i32
+    rescue OverflowError
+      raise Error.new("Config value #{key} in #{source} is outside the supported integer range")
     end
 
     private def expect_number(key : String, value : TomlScalar, source : String) : Float64
@@ -476,6 +485,10 @@ module Bon
 
     private def hex_rgb?(value : String) : Bool
       !!value.match(/\A#?[0-9a-fA-F]{6}\z/)
+    end
+
+    private def validate_finite!(key : String, value : Float64) : Nil
+      raise Error.new("#{key} must be finite") unless value.finite?
     end
   end
 end

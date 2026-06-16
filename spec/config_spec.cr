@@ -177,4 +177,25 @@ describe Bon::Config do
       Bon::Config.new(simulate_foreground_fade: 1.1).validate!
     end
   end
+
+  it "rejects invalid render executables and engines" do
+    expect_raises(Bon::Error, /render.typst_bin/) do
+      Bon::Config.new(typst_bin: "").validate!
+    end
+
+    expect_raises(Bon::Error, /render.latex_engine/) do
+      Bon::Config.new(latex_engine: "xelatex").validate!
+    end
+  end
+
+  it "rejects oversized integer config values" do
+    config = Bon::Config.new
+
+    expect_raises(Bon::Error, /outside the supported integer range/) do
+      config.overlay(Bon::Toml.parse(<<-TOML))
+        [cups]
+        copies = 999999999999999999
+      TOML
+    end
+  end
 end

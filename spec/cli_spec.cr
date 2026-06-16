@@ -41,6 +41,63 @@ describe Bon::Cli do
     help.should contain("--background-tint=HEX")
   end
 
+  it "shows root help and version without loading invalid local config" do
+    with_cli_temp_dir do |dir|
+      File.write(File.join(dir, "config.toml"), "[paper]\nwidth_mm = -1\n")
+
+      Dir.cd(dir) do
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        Bon::Cli.run(["--help"], stdout, stderr).should eq(0)
+        stderr.to_s.should eq("")
+        stdout.to_s.should contain("Usage: bon [print] [options] FILE...")
+
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        Bon::Cli.run(["--version"], stdout, stderr).should eq(0)
+        stderr.to_s.should eq("")
+        stdout.to_s.should contain("bon ")
+      end
+    end
+  end
+
+  it "shows simulate help without loading invalid local config" do
+    with_cli_temp_dir do |dir|
+      File.write(File.join(dir, "config.toml"), "[paper]\nwidth_mm = -1\n")
+
+      Dir.cd(dir) do
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        Bon::Cli.run(["sim", "--help"], stdout, stderr).should eq(0)
+        stderr.to_s.should eq("")
+        stdout.to_s.should contain("Usage: bon simulate|sim [options] [FILE...]")
+      end
+    end
+  end
+
+  it "reports invalid numeric options as CLI errors" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    Bon::Cli.run(["--copies", "nope"], stdout, stderr).should eq(2)
+
+    stdout.to_s.should eq("")
+    stderr.to_s.should contain("error: --copies must be an integer")
+  end
+
+  it "rejects unsupported or unsafe simulate formats" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    Bon::Cli.run(["sim", "--format", "svg"], stdout, stderr).should eq(2)
+    stderr.to_s.should contain("error: --format must be png or pdf")
+
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+    Bon::Cli.run(["sim", "--format", "../x"], stdout, stderr).should eq(2)
+    stderr.to_s.should contain("error: --format must not contain path separators")
+  end
+
   it "documents printer subcommands in printer help" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new

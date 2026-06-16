@@ -56,6 +56,15 @@ module Bon
 
     private def run_print(argv : Array(String)) : Int32
       reset_print_state
+      if help_requested?(argv)
+        @output_io.puts(build_print_parser(Config.new))
+        return 0
+      end
+      if version_requested?(argv)
+        @output_io.puts("bon #{VERSION}")
+        return 0
+      end
+
       config = Config.load
       parser = build_print_parser(config)
       parser.parse(argv)
@@ -112,14 +121,14 @@ module Bon
           TEXT
 
         parser.on("-d NAME", "--printer=NAME", "CUPS printer queue") { |name| config.printer_name = name }
-        parser.on("-n N", "--copies=N", "Number of copies") { |copies| config.cups_copies = copies.to_i }
+        parser.on("-n N", "--copies=N", "Number of copies") { |copies| config.cups_copies = parse_int(copies, "--copies") }
         parser.on("-o KEY=VALUE", "--option=KEY=VALUE", "Additional CUPS option") do |option|
           key, separator, value = option.partition("=")
           raise Error.new("CUPS option must use KEY=VALUE syntax: #{option}") if separator.empty? || key.empty?
           @cli_options[key] = value
         end
-        parser.on("--paper-mm=N", "Physical paper width in millimeters") { |value| config.paper_width_mm = value.to_f64 }
-        parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = value.to_f64 }
+        parser.on("--paper-mm=N", "Physical paper width in millimeters") { |value| config.paper_width_mm = parse_float(value, "--paper-mm") }
+        parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = parse_float(value, "--printable-width-pt") }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
         parser.on("--version", "Show version") { @show_version = true }
@@ -219,9 +228,6 @@ module Bon
 
     private def run_config_check : Int32
       statuses = Config.source_statuses
-      statuses.each do |status|
-        Config.validate_file!(status.path) if status.used
-      end
       Config.load_with_sources
 
       @output_io.puts("Config OK")
@@ -248,7 +254,13 @@ module Bon
       status = Process.run(command, shell: true, input: STDIN, output: @output_io, error: @error_io)
       raise Error.new("Editor failed: #{editor}") unless status.success?
 
-      Config.validate_file!(path)
+      if use_global
+        config = Config.new
+        config.overlay_file(path)
+        config.validate!
+      else
+        Config.load_with_sources
+      end
       @output_io.puts("Config OK: #{path}")
       0
     end
@@ -287,6 +299,14 @@ module Bon
     end
 
     private def run_simulate(argv : Array(String)) : Int32
+      if help_requested?(argv)
+        options = Simulate::Options.new
+        files = [] of String
+        show_help = [false]
+        @output_io.puts(build_simulate_parser(options, files, show_help))
+        return 0
+      end
+
       config = Config.load
       options = Simulate::Options.new(
         paper_mm: config.paper_width_mm,
@@ -318,20 +338,20 @@ module Bon
     private def build_simulate_parser(options : Simulate::Options, files : Array(String), show_help : Array(Bool)) : OptionParser
       OptionParser.new do |parser|
         parser.banner = "Usage: bon simulate|sim [options] [FILE...]"
-        parser.on("-f FORMAT", "--format=FORMAT", "Output format, for example png or pdf") { |value| options.format = value.sub(/^\./, "") }
+        parser.on("-f FORMAT", "--format=FORMAT", "Output format, png or pdf") { |value| options.format = value.sub(/^\./, "") }
         parser.on("--paper-mm=N", "Simulated paper width in millimeters") do |value|
-          options.paper_mm = value.to_f64
+          options.paper_mm = parse_float(value, "--paper-mm")
           options.printable_width_mm = Config.default_printable_width_pt(options.paper_mm) * 25.4 / 72.0 if options.printable_width_auto
         end
-        parser.on("--content-mm=N", "Printed content width in millimeters") { |value| options.content_mm = value.to_f64 }
-        parser.on("--ppi=N", "Typst content render PPI") { |value| options.ppi = value.to_i }
-        parser.on("--mockup-ppi=N", "Final mockup image PPI") { |value| options.mockup_ppi = value.to_i }
-        parser.on("--top-mm=N", "Paper shown above the printed content") { |value| options.top_mm = value.to_f64 }
-        parser.on("--bottom-mm=N", "Paper shown below the printed content") { |value| options.bottom_mm = value.to_f64 }
+        parser.on("--content-mm=N", "Printed content width in millimeters") { |value| options.content_mm = parse_float(value, "--content-mm") }
+        parser.on("--ppi=N", "Typst content render PPI") { |value| options.ppi = parse_int(value, "--ppi") }
+        parser.on("--mockup-ppi=N", "Final mockup image PPI") { |value| options.mockup_ppi = parse_int(value, "--mockup-ppi") }
+        parser.on("--top-mm=N", "Paper shown above the printed content") { |value| options.top_mm = parse_float(value, "--top-mm") }
+        parser.on("--bottom-mm=N", "Paper shown below the printed content") { |value| options.bottom_mm = parse_float(value, "--bottom-mm") }
         parser.on("--no-crop", "Do not center-crop content wider than printable width") { options.no_crop = true }
         parser.on("--background-tint=HEX", "Paper background tint as #RRGGBB") { |value| options.background_tint = value }
         parser.on("--foreground-color=HEX", "Mockup foreground color, for example #232320") { |value| options.foreground_rgb = Simulate.parse_color(value) }
-        parser.on("--foreground-fade=N", "Mockup foreground opacity from 0.0 to 1.0") { |value| options.foreground_fade = value.to_f64 }
+        parser.on("--foreground-fade=N", "Mockup foreground opacity from 0.0 to 1.0") { |value| options.foreground_fade = parse_float(value, "--foreground-fade") }
         parser.on("--out-dir=DIR", "Directory for generated outputs") do |value|
           options.out_dir = File.expand_path(value)
         end
@@ -346,6 +366,8 @@ module Bon
 
     private def validate_simulate_options(options : Simulate::Options) : Nil
       raise Error.new("--format is required") if options.format.empty?
+      raise Error.new("--format must not contain path separators") if options.format.includes?(File::SEPARATOR) || options.format.includes?('/') || options.format.includes?('\\')
+      raise Error.new("--format must be png or pdf") unless {"png", "pdf"}.includes?(options.format)
       raise Error.new("--paper-mm, --ppi, and --mockup-ppi must be positive") unless options.paper_mm > 0 && options.ppi > 0 && options.mockup_ppi > 0
       raise Error.new("printable width must be positive") unless options.printable_width_mm > 0
       raise Error.new("printable width must not exceed --paper-mm") if options.printable_width_mm > options.paper_mm
@@ -428,11 +450,24 @@ module Bon
       end
     end
 
-    private def display_path(path : String) : String
-      expanded = File.expand_path(path)
-      cwd = File.expand_path(Dir.current)
-      prefix = cwd + File::SEPARATOR
-      expanded.starts_with?(prefix) ? expanded[prefix.size..] : expanded
+    private def help_requested?(argv : Array(String)) : Bool
+      argv.any? { |arg| arg == "-h" || arg == "--help" }
+    end
+
+    private def version_requested?(argv : Array(String)) : Bool
+      argv.any? { |arg| arg == "--version" }
+    end
+
+    private def parse_int(value : String, option : String) : Int32
+      value.to_i32
+    rescue ex : ArgumentError | OverflowError
+      raise Error.new("#{option} must be an integer")
+    end
+
+    private def parse_float(value : String, option : String) : Float64
+      value.to_f64
+    rescue ArgumentError
+      raise Error.new("#{option} must be a number")
     end
   end
 end
