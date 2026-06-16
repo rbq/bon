@@ -117,6 +117,45 @@ describe Bon::Simulate do
       red.should be > blue
     end
   end
+
+  it "renders JPEG wrappers with the temporary directory as the Typst root" do
+    with_temp_dir do |dir|
+      source_dir = File.join(dir, "source")
+      temp_dir = File.join(dir, "simulate-root")
+      FileUtils.mkdir_p(source_dir)
+      FileUtils.mkdir_p(temp_dir)
+      source = File.join(source_dir, "receipt.jpg")
+      fake_png = File.join(dir, "content.png")
+      fake_typst = File.join(dir, "typst")
+      log = File.join(dir, "typst-args.log")
+
+      write_jpeg_dimensions(source, 1, 1)
+      Bon::Simulate.write_png(fake_png, 1, 1, Bytes[255, 255, 255])
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        printf '%s\n' "$@" > "$BON_TYPST_LOG"
+        output=""
+        for arg do
+          output="$arg"
+        done
+        cp "$BON_FAKE_PNG" "$output"
+        SH
+      File.chmod(fake_typst, 0o755)
+
+      with_env({"BON_FAKE_PNG" => fake_png, "BON_TYPST_LOG" => log}) do
+        options = Bon::Simulate::Options.new(typst_bin: fake_typst, out_dir: dir, top_mm: 0.0, bottom_mm: 0.0)
+
+        Bon::Simulate.render_source(source, temp_dir, options)
+
+        args = File.read(log).lines.map(&.chomp)
+        root_index = args.index("--root").not_nil!
+        args[root_index + 1].should eq(temp_dir)
+        args.should_not contain(source_dir)
+        File.read(File.join(temp_dir, "receipt-image-wrapper.typ")).should contain("#image(\"source.jpg\"")
+        File.exists?(File.join(temp_dir, "source.jpg")).should be_true
+      end
+    end
+  end
 end
 
 describe Bon::Cli do
@@ -242,6 +281,18 @@ private def pixel_at(path : String, index : Int32) : Tuple(UInt8, UInt8, UInt8)
   raster = Bon::Simulate.read_png(path)
   offset = index * raster.channels
   {raster.pixels[offset], raster.pixels[offset + 1], raster.pixels[offset + 2]}
+end
+
+private def write_jpeg_dimensions(path : String, width : Int32, height : Int32) : Nil
+  File.open(path, "w") do |file|
+    file.write(Bytes[0xff, 0xd8, 0xff, 0xc0])
+    file.write_bytes(8_u16, IO::ByteFormat::BigEndian)
+    file.write_byte(8_u8)
+    file.write_bytes(height.to_u16, IO::ByteFormat::BigEndian)
+    file.write_bytes(width.to_u16, IO::ByteFormat::BigEndian)
+    file.write_byte(1_u8)
+    file.write(Bytes[0xff, 0xd9])
+  end
 end
 
 private def with_temp_dir(& : String ->) : Nil

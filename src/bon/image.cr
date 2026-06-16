@@ -1,4 +1,5 @@
 require "compress/zlib"
+require "file_utils"
 
 require "./command"
 require "./config"
@@ -207,13 +208,16 @@ module Bon
 
     def self.wrap_as_typst_pdf(source : String, output : String, temp_dir : String, config : Config, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : Nil
       size = page_size(source, config)
+      image_name = "source#{File.extname(source).downcase}"
+      image_path = File.join(temp_dir, image_name)
+      FileUtils.cp(source, image_path) unless File.expand_path(source) == File.expand_path(image_path)
       wrapper = File.join(temp_dir, "image-wrapper.typ")
       File.write(wrapper, String.build do |io|
         io << "#set page(width: #{PDF.format_points(size.width)}pt, height: #{PDF.format_points(size.height)}pt, margin: 0pt)\n"
         io << "#set text(size: 0pt)\n"
-        io << "#image(\"#{typst_escape(source)}\", width: #{PDF.format_points(size.width)}pt)\n"
+        io << "#image(\"#{typst_escape(image_name)}\", width: #{PDF.format_points(size.width)}pt)\n"
       end)
-      Typst.compile(wrapper, output, File.dirname(source), config, dry_run, output_io, error_io)
+      Typst.compile(wrapper, output, temp_dir, config, dry_run, output_io, error_io)
     end
 
     private def self.typst_escape(path : String) : String

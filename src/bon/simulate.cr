@@ -307,13 +307,16 @@ module Bon
 
     private def self.render_jpeg_to_png(source : String, output : String, temp_dir : String, options : Options, output_io : IO, error_io : IO) : Nil
       size = Image.page_size(source, options.ppi)
+      image_name = "source#{File.extname(source).downcase}"
+      image_path = File.join(temp_dir, image_name)
+      FileUtils.cp(source, image_path) unless File.expand_path(source) == File.expand_path(image_path)
       wrapper = File.join(temp_dir, "#{File.basename(source, File.extname(source))}-image-wrapper.typ")
       File.write(wrapper, String.build do |io|
         io << "#set page(width: #{PDF.format_points(size.width)}pt, height: #{PDF.format_points(size.height)}pt, margin: 0pt)\n"
         io << "#set text(size: 0pt)\n"
-        io << "#image(\"#{typst_escape(source)}\", width: #{PDF.format_points(size.width)}pt)\n"
+        io << "#image(\"#{typst_escape(image_name)}\", width: #{PDF.format_points(size.width)}pt)\n"
       end)
-      run_typst(options.typst_bin, wrapper, output, "png", options.ppi, File.dirname(source), output_io, error_io)
+      run_typst(options.typst_bin, wrapper, output, "png", options.ppi, temp_dir, output_io, error_io)
     end
 
     private def self.physical_source_width_mm(source : String, ext : String, options : Options) : Float64
