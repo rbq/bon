@@ -45,7 +45,9 @@ module Bon
 
     private def dispatch(argv : Array(String)) : Tuple(String, Array(String))
       first = argv.first?
-      if first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config"
+      if first == "sim"
+        {"simulate", argv[1..]}
+      elsif first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config"
         {first.not_nil!, argv[1..]}
       else
         {"print", argv}
@@ -92,13 +94,19 @@ module Bon
       OptionParser.new do |parser|
         parser.banner = <<-TEXT
           Usage: bon [print] [options] FILE...
+                 bon simulate [options] [FILE...]
+                 bon sim [options] [FILE...]
                  bon printer [list]
                  bon config <check|show|edit>
+                 bon init [options]
 
           Commands:
             print      Print one or more files. This is the default command.
+            simulate   Render receipt mockups for Typst and image inputs.
+            sim        Alias for simulate.
             printer    List discovered CUPS printer queues.
             config     Validate, show, or edit configuration.
+            init       Write a default config file.
 
           Print options:
           TEXT
@@ -282,8 +290,11 @@ module Bon
       config = Config.load
       options = Simulate::Options.new(
         paper_mm: config.paper_width_mm,
+        printable_width_mm: config.printable_width_pt * 25.4 / 72.0,
+        printable_width_auto: !config.explicit_printable_width_pt?,
         ppi: config.image_ppi,
-        typst_bin: config.typst_bin
+        typst_bin: config.typst_bin,
+        background_tint: config.simulate_background_tint
       )
       files = [] of String
       show_help = [false]
@@ -304,14 +315,19 @@ module Bon
 
     private def build_simulate_parser(options : Simulate::Options, files : Array(String), show_help : Array(Bool)) : OptionParser
       OptionParser.new do |parser|
-        parser.banner = "Usage: bon simulate [options] [FILE...]"
+        parser.banner = "Usage: bon simulate|sim [options] [FILE...]"
         parser.on("-f FORMAT", "--format=FORMAT", "Output format, for example png or pdf") { |value| options.format = value.sub(/^\./, "") }
-        parser.on("--paper-mm=N", "Simulated paper width in millimeters") { |value| options.paper_mm = value.to_f64 }
+        parser.on("--paper-mm=N", "Simulated paper width in millimeters") do |value|
+          options.paper_mm = value.to_f64
+          options.printable_width_mm = Config.default_printable_width_pt(options.paper_mm) * 25.4 / 72.0 if options.printable_width_auto
+        end
         parser.on("--content-mm=N", "Printed content width in millimeters") { |value| options.content_mm = value.to_f64 }
         parser.on("--ppi=N", "Typst content render PPI") { |value| options.ppi = value.to_i }
         parser.on("--mockup-ppi=N", "Final mockup image PPI") { |value| options.mockup_ppi = value.to_i }
         parser.on("--top-mm=N", "Paper shown above the printed content") { |value| options.top_mm = value.to_f64 }
         parser.on("--bottom-mm=N", "Paper shown below the printed content") { |value| options.bottom_mm = value.to_f64 }
+        parser.on("--no-crop", "Do not center-crop content wider than printable width") { options.no_crop = true }
+        parser.on("--background-tint=HEX", "Paper background tint as #RRGGBB") { |value| options.background_tint = value }
         parser.on("--out-dir=DIR", "Directory for generated outputs") do |value|
           options.out_dir = File.expand_path(value)
         end
@@ -327,10 +343,14 @@ module Bon
     private def validate_simulate_options(options : Simulate::Options) : Nil
       raise Error.new("--format is required") if options.format.empty?
       raise Error.new("--paper-mm, --ppi, and --mockup-ppi must be positive") unless options.paper_mm > 0 && options.ppi > 0 && options.mockup_ppi > 0
+      raise Error.new("printable width must be positive") unless options.printable_width_mm > 0
+      raise Error.new("printable width must not exceed --paper-mm") if options.printable_width_mm > options.paper_mm
       if content_mm = options.content_mm
         raise Error.new("--content-mm must be positive") unless content_mm > 0
+        raise Error.new("--content-mm must not exceed --paper-mm") if content_mm > options.paper_mm
       end
       raise Error.new("--top-mm and --bottom-mm cannot be negative") if options.top_mm < 0 || options.bottom_mm < 0
+      Simulate.parse_rgb(options.background_tint)
     end
 
     private def run_init(argv : Array(String)) : Int32

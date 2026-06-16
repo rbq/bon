@@ -4,6 +4,8 @@ require "file_utils"
 
 require "./command"
 require "./config"
+require "./image"
+require "./pdf"
 require "./typst"
 
 module Bon
@@ -16,23 +18,31 @@ module Bon
     class Options
       property format : String
       property paper_mm : Float64
+      property printable_width_mm : Float64
+      property printable_width_auto : Bool
       property content_mm : Float64?
+      property no_crop : Bool
       property ppi : Int32
       property mockup_ppi : Int32
       property top_mm : Float64
       property bottom_mm : Float64
       property out_dir : String?
       property typst_bin : String
+      property background_tint : String
 
       def initialize(@format = "png",
                      @paper_mm = 80.0,
+                     @printable_width_mm = Config.default_printable_width_pt(80.0) * 25.4 / 72.0,
+                     @printable_width_auto = true,
                      @content_mm = nil,
+                     @no_crop = false,
                      @ppi = DEFAULT_PPI,
                      @mockup_ppi = DEFAULT_MOCKUP_PPI,
                      @top_mm = 10.0,
                      @bottom_mm = 14.0,
                      @out_dir = nil,
-                     @typst_bin = "typst")
+                     @typst_bin = "typst",
+                     @background_tint = "#f5f1e0")
       end
     end
 
@@ -47,7 +57,7 @@ module Bon
     end
 
     def self.render_sources(sources : Array(String), options : Options, output_io : IO = STDOUT, error_io : IO = STDERR) : Array(String)
-      raise Error.new("No Typst sources found") if sources.empty?
+      raise Error.new("No simulation inputs found") if sources.empty?
 
       temp_dir = create_temp_dir("bon-simulate-")
       begin
@@ -58,23 +68,35 @@ module Bon
     end
 
     def self.default_sources(cwd = Dir.current) : Array(String)
-      Dir.glob(File.join(cwd, "*.typ")).sort
+      ["*.typ", "*.png", "*.jpg", "*.jpeg"].flat_map { |pattern| Dir.glob(File.join(cwd, pattern)) }.sort
     end
 
     def self.render_source(source : String, temp_dir : String, options : Options, output_io : IO = STDOUT, error_io : IO = STDERR) : String
-      raise Error.new("Typst source not found: #{source}") unless File.exists?(source)
+      raise Error.new("Simulation input not found: #{source}") unless File.exists?(source)
       raise Error.new("Not a file: #{source}") unless File.file?(source)
-      raise Error.new("simulate expects .typ sources: #{source}") unless File.extname(source).downcase == ".typ"
+      ext = File.extname(source).downcase
+      raise Error.new("simulate expects .typ, .png, .jpg, or .jpeg inputs: #{source}") unless supported_input?(ext)
 
-      source_width = source_width_mm(source) || options.paper_mm
-      content_width = options.content_mm || {source_width, options.paper_mm}.min
+      source_width = physical_source_width_mm(source, ext, options)
+      if source_width > options.paper_mm + PDF::CROP_EPSILON_PT * 25.4 / 72.0
+        raise Error.new("Input width #{format_mm(source_width)}mm exceeds #{format_mm(options.paper_mm)}mm paper width: #{source}")
+      end
+      content_width = content_width_mm(source_width, options)
       output = output_path(source, options)
       FileUtils.mkdir_p(File.dirname(output))
-      intermediate_png = File.join(temp_dir, "#{File.basename(source, ".typ")}-content.png")
-      mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{File.basename(source, ".typ")}-mockup.png")
+      basename = File.basename(source, ext)
+      intermediate_png = ext == ".png" ? source : File.join(temp_dir, "#{basename}-content.png")
+      mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{basename}-mockup.png")
+      paper_rgb = parse_rgb(options.background_tint)
 
-      run_typst(options.typst_bin, source, intermediate_png, "png", options.ppi, Typst.root_for(source), output_io, error_io)
-      simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, options.top_mm, options.bottom_mm, seed_for(source))
+      case ext
+      when ".typ"
+        run_typst(options.typst_bin, source, intermediate_png, "png", options.ppi, Typst.root_for(source), output_io, error_io)
+      when ".jpg", ".jpeg"
+        render_jpeg_to_png(source, intermediate_png, temp_dir, options, output_io, error_io)
+      end
+
+      simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, options.top_mm, options.bottom_mm, seed_for(source), source_width, paper_rgb)
       convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
       output
     end
@@ -82,16 +104,21 @@ module Bon
     def self.output_path(source : String, options : Options) : String
       source_path = File.expand_path(source)
       output_dir = options.out_dir || File.dirname(source_path)
-      File.join(File.expand_path(output_dir), "#{File.basename(source_path, ".typ")}_#{mm_label(options.paper_mm)}mm-printout.#{options.format}")
+      ext = File.extname(source_path)
+      File.join(File.expand_path(output_dir), "#{File.basename(source_path, ext)}_#{mm_label(options.paper_mm)}mm-printout.#{options.format}")
     end
 
-    def self.simulate_png(source_png : String, output_png : String, paper_mm : Float64, content_width_mm : Float64, mockup_ppi : Int32, top_mm : Float64, bottom_mm : Float64, seed : Int32) : Nil
+    def self.simulate_png(source_png : String, output_png : String, paper_mm : Float64, content_width_mm : Float64, mockup_ppi : Int32, top_mm : Float64, bottom_mm : Float64, seed : Int32, source_width_mm : Float64? = nil, paper_rgb = PAPER_RGB) : Nil
       source = read_png(source_png)
       densities = source_densities(source)
 
       paper_width = mm_to_px(paper_mm, mockup_ppi)
       content_width = {paper_width, mm_to_px(content_width_mm, mockup_ppi)}.min
-      content_height = {1, (source.height.to_f64 * content_width / source.width).round.to_i}.max
+      source_physical_width = source_width_mm || content_width_mm
+      crop_ratio = content_width_mm < source_physical_width ? content_width_mm / source_physical_width : 1.0
+      crop_width = {source.width, {(source.width * crop_ratio).round.to_i, 1}.max}.min
+      crop_x = (source.width - crop_width) // 2
+      content_height = {1, (source.height.to_f64 * content_width / crop_width).round.to_i}.max
       top = mm_to_px(top_mm, mockup_ppi)
       bottom = mm_to_px(bottom_mm, mockup_ppi)
       output_height = top + content_height + bottom
@@ -100,7 +127,7 @@ module Bon
       rgb = Bytes.new(paper_width * output_height * 3)
       output_height.times do |y|
         paper_width.times do |x|
-          red, green, blue = paper_pixel(x, y, paper_width, seed)
+          red, green, blue = paper_pixel(x, y, paper_width, seed, paper_rgb)
           offset = (y * paper_width + x) * 3
           rgb[offset] = red.to_u8
           rgb[offset + 1] = green.to_u8
@@ -114,7 +141,7 @@ module Bon
         row_band *= 0.88 if sy % 24 == 0
 
         content_width.times do |dx|
-          sx = {source.width - 1, dx * source.width // content_width}.min
+          sx = crop_x + {crop_width - 1, dx * crop_width // content_width}.min
           density = densities[sy * source.width + sx]
           next if density <= 8
 
@@ -140,74 +167,14 @@ module Bon
     end
 
     def self.read_png(path : String) : Raster
-      data = File.read(path).to_slice
-      raise Error.new("Not a PNG file: #{path}") unless data[0, 8] == Bytes[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+      raster = Image.read_png(path)
+      Raster.new(raster.width, raster.height, raster.channels, raster.pixels)
+    end
 
-      offset = 8
-      width = 0
-      height = 0
-      channels = 0
-      compressed = IO::Memory.new
-
-      while offset < data.size
-        length = read_u32(data, offset)
-        chunk_type = String.new(data[offset + 4, 4])
-        chunk_data = data[offset + 8, length]
-        offset += 12 + length
-
-        case chunk_type
-        when "IHDR"
-          width = read_u32(chunk_data, 0)
-          height = read_u32(chunk_data, 4)
-          bit_depth = chunk_data[8]
-          color_type = chunk_data[9]
-          interlace = chunk_data[12]
-          unless bit_depth == 8 && {0_u8, 2_u8, 6_u8}.includes?(color_type) && interlace == 0
-            raise Error.new("Only 8-bit, non-interlaced grayscale/RGB/RGBA PNG files are supported")
-          end
-          channels = color_type == 0 ? 1 : (color_type == 2 ? 3 : 4)
-        when "IDAT"
-          compressed.write(chunk_data)
-        when "IEND"
-          break
-        end
-      end
-
-      raise Error.new("PNG is missing an IHDR chunk: #{path}") if width == 0 || height == 0 || channels == 0
-
-      raw = inflate(compressed.to_slice)
-      stride = width * channels
-      pixels = Bytes.new(width * height * channels)
-      previous = Bytes.new(stride)
-      pos = 0
-
-      height.times do |row|
-        filter_type = raw[pos]
-        pos += 1
-        reconstructed = Bytes.new(stride)
-
-        stride.times do |i|
-          value = raw[pos + i]
-          left = i >= channels ? reconstructed[i - channels] : 0_u8
-          up = previous[i]
-          up_left = i >= channels ? previous[i - channels] : 0_u8
-          reconstructed[i] = case filter_type
-                             when 0 then value
-                             when 1 then ((value.to_i + left.to_i) & 0xff).to_u8
-                             when 2 then ((value.to_i + up.to_i) & 0xff).to_u8
-                             when 3 then ((value.to_i + ((left.to_i + up.to_i) >> 1)) & 0xff).to_u8
-                             when 4 then ((value.to_i + paeth(left.to_i, up.to_i, up_left.to_i)) & 0xff).to_u8
-                             else        raise Error.new("Unsupported PNG filter type: #{filter_type}")
-                             end
-        end
-
-        pos += stride
-        start = row * stride
-        pixels[start, stride].copy_from(reconstructed)
-        previous = reconstructed
-      end
-
-      Raster.new(width, height, channels, pixels)
+    def self.parse_rgb(value : String) : Tuple(Int32, Int32, Int32)
+      match = value.match(/\A#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})\z/)
+      raise Error.new("background tint must be a hex RGB color like #f5f1e0") unless match
+      {match[1].to_i(16), match[2].to_i(16), match[3].to_i(16)}
     end
 
     def self.write_png(path : String, width : Int32, height : Int32, rgb : Bytes) : Nil
@@ -283,16 +250,16 @@ module Bon
       spread
     end
 
-    private def self.paper_pixel(x : Int32, y : Int32, width : Int32, seed : Int32) : Tuple(Int32, Int32, Int32)
+    private def self.paper_pixel(x : Int32, y : Int32, width : Int32, seed : Int32, paper_rgb : Tuple(Int32, Int32, Int32)) : Tuple(Int32, Int32, Int32)
       noise = hash_byte(x, y, seed) - 128
       broad_noise = hash_byte(x // 5, y // 3, seed + 17) - 128
       fiber = hash_byte(x // 19, y, seed + 41) < 7 ? -4 : 0
       edge_shadow = {0, 12 - {x, width - x - 1}.min}.max
       shade = (noise / 32.0 + broad_noise / 42.0).round.to_i + fiber - edge_shadow
       {
-        clamp(PAPER_RGB[0] + shade, 0, 255),
-        clamp(PAPER_RGB[1] + shade, 0, 255),
-        clamp(PAPER_RGB[2] + shade, 0, 255),
+        clamp(paper_rgb[0] + shade, 0, 255),
+        clamp(paper_rgb[1] + shade, 0, 255),
+        clamp(paper_rgb[2] + shade, 0, 255),
       }
     end
 
@@ -323,6 +290,48 @@ module Bon
       ], "Typst simulation render failed for #{input}", false, false, output_io, error_io)
     end
 
+    private def self.render_jpeg_to_png(source : String, output : String, temp_dir : String, options : Options, output_io : IO, error_io : IO) : Nil
+      size = Image.page_size(source, options.ppi)
+      wrapper = File.join(temp_dir, "#{File.basename(source, File.extname(source))}-image-wrapper.typ")
+      File.write(wrapper, String.build do |io|
+        io << "#set page(width: #{PDF.format_points(size.width)}pt, height: #{PDF.format_points(size.height)}pt, margin: 0pt)\n"
+        io << "#set text(size: 0pt)\n"
+        io << "#image(\"#{typst_escape(source)}\", width: #{PDF.format_points(size.width)}pt)\n"
+      end)
+      run_typst(options.typst_bin, wrapper, output, "png", options.ppi, File.dirname(source), output_io, error_io)
+    end
+
+    private def self.physical_source_width_mm(source : String, ext : String, options : Options) : Float64
+      if ext == ".typ"
+        source_width_mm(source) || options.paper_mm
+      else
+        Image.page_size(source, options.ppi).width * 25.4 / 72.0
+      end
+    end
+
+    private def self.content_width_mm(source_width : Float64, options : Options) : Float64
+      if content = options.content_mm
+        content
+      elsif options.no_crop || source_width <= options.printable_width_mm + PDF::CROP_EPSILON_PT * 25.4 / 72.0
+        source_width
+      else
+        options.printable_width_mm
+      end
+    end
+
+    private def self.supported_input?(ext : String) : Bool
+      ext == ".typ" || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+    end
+
+    private def self.typst_escape(path : String) : String
+      path.gsub("\\", "\\\\").gsub("\"", "\\\"")
+    end
+
+    private def self.format_mm(value : Float64) : String
+      formatted = value.round(3).to_s
+      formatted.sub(/\.0+$/, "").sub(/(\.\d*?)0+$/, "\\1")
+    end
+
     private def self.source_width_mm(source : String) : Float64?
       match = File.read(source).match(/\bwidth\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*mm\b/)
       match ? match[1].to_f64 : nil
@@ -350,28 +359,10 @@ module Bon
       (value & 0xff_u64).to_i
     end
 
-    private def self.paeth(left : Int32, up : Int32, up_left : Int32) : Int32
-      estimate = left + up - up_left
-      dist_left = (estimate - left).abs
-      dist_up = (estimate - up).abs
-      dist_up_left = (estimate - up_left).abs
-      return left if dist_left <= dist_up && dist_left <= dist_up_left
-      dist_up <= dist_up_left ? up : up_left
-    end
-
-    private def self.inflate(data : Bytes) : Bytes
-      text = Compress::Zlib::Reader.open(IO::Memory.new(data)) { |zlib| zlib.gets_to_end }
-      text.to_slice
-    end
-
     private def self.deflate(data : Bytes) : Bytes
       io = IO::Memory.new
       Compress::Zlib::Writer.open(io) { |zlib| zlib.write(data) }
       io.to_slice
-    end
-
-    private def self.read_u32(data : Bytes, offset : Int32) : Int32
-      ((data[offset].to_i << 24) | (data[offset + 1].to_i << 16) | (data[offset + 2].to_i << 8) | data[offset + 3].to_i)
     end
 
     private def self.write_u32(io : IO, value) : Nil

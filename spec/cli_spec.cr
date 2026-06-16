@@ -4,7 +4,7 @@ require "spec"
 require "../src/bon/cli"
 
 describe Bon::Cli do
-  it "documents print and printer commands in root help" do
+  it "documents root commands in root help" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new
 
@@ -14,11 +14,31 @@ describe Bon::Cli do
     stderr.to_s.should eq("")
     help = stdout.to_s
     help.should contain("Usage: bon [print] [options] FILE...")
+    help.should contain("bon simulate [options] [FILE...]")
+    help.should contain("bon sim [options] [FILE...]")
     help.should contain("bon printer [list]")
     help.should contain("bon config <check|show|edit>")
+    help.should contain("bon init [options]")
     help.should contain("print      Print one or more files")
+    help.should contain("simulate   Render receipt mockups")
+    help.should contain("sim        Alias for simulate")
     help.should contain("printer    List discovered CUPS printer queues")
     help.should contain("config     Validate, show, or edit configuration")
+    help.should contain("init       Write a default config file")
+  end
+
+  it "documents the simulate alias in simulate help" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    status = Bon::Cli.run(["sim", "--help"], stdout, stderr)
+
+    status.should eq(0)
+    stderr.to_s.should eq("")
+    help = stdout.to_s
+    help.should contain("Usage: bon simulate|sim [options] [FILE...]")
+    help.should contain("--no-crop")
+    help.should contain("--background-tint=HEX")
   end
 
   it "documents printer subcommands in printer help" do
@@ -164,6 +184,8 @@ describe Bon::Cli do
           output.should contain("candidates = [\"EPSON_TM_m30III\", \"EPSON_TM_m30III__USB_\"]")
           output.should contain("width_mm = 58.0")
           output.should contain("printable_width_pt = 136.197")
+          output.should contain("[simulate]")
+          output.should contain("background_tint = \"#f5f1e0\"")
           output.should contain("[cups.options]")
         end
       end
