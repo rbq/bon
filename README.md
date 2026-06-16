@@ -151,14 +151,14 @@ background_tint = "#f5f1e0"
 [cups]
 copies = 1
 dry_run = false
-paper_cut = "CutPerPage"
 
 [cups.options]
 Resolution = "203x203dpi"
+TmxPaperCut = "CutPerPage"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 

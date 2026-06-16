@@ -78,7 +78,7 @@ describe Bon::Cups do
   end
 
   it "lets config and CLI options override paper cutting" do
-    config = Bon::Config.new(cups_paper_cut: "NoCut")
+    config = Bon::Config.new(cups_options: {"TmxPaperCut" => "NoCut"})
 
     options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)
     options["TmxPaperCut"].should eq("NoCut")

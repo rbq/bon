@@ -175,7 +175,6 @@ module Bon
     property latex_engine : String
     property cups_copies : Int32
     property cups_dry_run : Bool
-    property cups_paper_cut : String?
     property cups_options : Hash(String, String)
     property simulate_background_tint : String
 
@@ -192,9 +191,9 @@ module Bon
                    @latex_engine = "auto",
                    @cups_copies = 1,
                    @cups_dry_run = false,
-                   @cups_paper_cut = "CutPerPage",
                    @cups_options = {
                      "Resolution"        => "203x203dpi",
+                     "TmxPaperCut"       => "CutPerPage",
                      "TmxPaperReduction" => "Off",
                    },
                    @simulate_background_tint = "#f5f1e0")
@@ -332,12 +331,7 @@ module Bon
 
         io << "[cups]\n"
         io << "copies = #{@cups_copies}\n"
-        io << "dry_run = #{@cups_dry_run}\n"
-        if paper_cut = @cups_paper_cut
-          io << "paper_cut = \"#{toml_escape(paper_cut)}\"\n\n"
-        else
-          io << "paper_cut = \"\"\n\n"
-        end
+        io << "dry_run = #{@cups_dry_run}\n\n"
 
         io << "[cups.options]\n"
         @cups_options.keys.sort.each do |key|
@@ -383,12 +377,9 @@ module Bon
           @cups_copies = expect_int(key, value, source)
         when "cups.dry_run"
           @cups_dry_run = expect_bool(key, value, source)
-        when "cups.paper_cut"
-          paper_cut = expect_string(key, value, source)
-          @cups_paper_cut = paper_cut.empty? ? nil : paper_cut
         else
           if key.starts_with?("cups.options.")
-            @cups_options[key[13..]] = scalar_to_string(key, value, source)
+            set_cups_option(key[13..], scalar_to_string(key, value, source))
           else
             raise Error.new("Unknown config key #{key} in #{source}")
           end
@@ -411,9 +402,6 @@ module Bon
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
       raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
       raise Error.new("cups.copies must be at least 1") unless @cups_copies >= 1
-      if paper_cut = @cups_paper_cut
-        raise Error.new("cups.paper_cut must be CutPerPage, CutPerJob, NoCut, or empty") unless {"CutPerPage", "CutPerJob", "NoCut"}.includes?(paper_cut)
-      end
     end
 
     def paper_width_pt : Float64
@@ -459,6 +447,14 @@ module Bon
         value.to_s
       else
         raise Error.new("Config value #{key} in #{source} must be a string, number, or boolean")
+      end
+    end
+
+    private def set_cups_option(key : String, value : String) : Nil
+      if value.empty?
+        @cups_options.delete(key)
+      else
+        @cups_options[key] = value
       end
     end
 

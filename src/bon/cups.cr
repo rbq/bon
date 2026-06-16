@@ -119,9 +119,6 @@ module Bon
     def self.build_options(config : Config, pdf : PDF::PageSize, cli_options : Hash(String, String)) : Hash(String, String)
       options = Hash(String, String).new
       config.cups_options.each { |key, value| options[key] = value }
-      if paper_cut = config.cups_paper_cut
-        options["TmxPaperCut"] = paper_cut unless options.has_key?("TmxPaperCut")
-      end
       cli_options.each { |key, value| options[key] = value }
       options["ppi"] = config.image_ppi.to_s unless options.has_key?("ppi")
 

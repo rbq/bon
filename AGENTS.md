@@ -51,6 +51,7 @@ When modifying the application, keep all of the following in sync:
 - The local TOML parser intentionally supports only the subset needed by the config schema: tables, dotted tables, strings, booleans, integers, floats, and string arrays.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
+- Config `[cups]` is reserved for bon-controlled CUPS behavior such as `copies` and `dry_run`; arbitrary CUPS/driver options live under `[cups.options]` and are passed as `lp -o` values. Empty `[cups.options]` string values remove inherited/default options.
 - PDF inputs pass through unchanged before width handling.
 - Typst inputs run `typst compile --root <root> <source> <temp>.pdf`.
 - Image inputs use `render.image_ppi` to determine physical size and are sent directly to CUPS when no center-crop is needed.
