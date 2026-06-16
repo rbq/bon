@@ -1,5 +1,6 @@
 require "spec"
 require "../src/bon/config"
+require "../src/bon/pdf"
 
 describe Bon::Toml do
   it "parses the supported scalar and array subset" do
@@ -59,6 +60,34 @@ describe Bon::Config do
 
   it "defaults Typst input preparation to PDF mode" do
     Bon::Config.default_toml.should contain("typst_mode = \"pdf\"")
+  end
+
+  it "uses automatic printable widths for common thermal paper sizes" do
+    default = Bon::Config.new
+    fifty_eight = Bon::Config.new(paper_width_mm: 58.0)
+
+    Bon::PDF.format_points(default.printable_width_pt).should eq("204.296")
+    Bon::PDF.format_points(fifty_eight.printable_width_pt).should eq("136.197")
+  end
+
+  it "lets printable width follow paper width when configured as automatic" do
+    config = Bon::Config.new(printable_width_pt: 149.1)
+
+    config.overlay(Bon::Toml.parse(<<-TOML))
+      [paper]
+      width_mm = 58.0
+      printable_width_pt = 0.0
+    TOML
+
+    Bon::PDF.format_points(config.printable_width_pt).should eq("136.197")
+  end
+
+  it "rejects printable widths wider than the paper" do
+    config = Bon::Config.new(paper_width_mm: 58.0, printable_width_pt: 204.3)
+
+    expect_raises(Bon::Error, /printable_width_pt/) do
+      config.validate!
+    end
   end
 
   it "defaults thermal paper cutting to after each page" do

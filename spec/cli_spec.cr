@@ -163,7 +163,7 @@ describe Bon::Cli do
           output.should contain("name = \"\"")
           output.should contain("candidates = [\"EPSON_TM_m30III\", \"EPSON_TM_m30III__USB_\"]")
           output.should contain("width_mm = 58.0")
-          output.should contain("printable_width_pt = 204.3")
+          output.should contain("printable_width_pt = 136.197")
           output.should contain("[cups.options]")
         end
       end
@@ -241,9 +241,9 @@ describe Bon::Cli do
           output.should_not contain("--ppi")
           output.should_not contain("-f png")
           output.should contain("gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite")
-          output.should contain("-dDEVICEWIDTHPOINTS=204.3")
+          output.should contain("-dDEVICEWIDTHPOINTS=204.296")
           output.should contain("lp -d EPSON_TM_m30III -n 1")
-          output.should contain("-o media=Custom.204.3x300")
+          output.should contain("-o media=Custom.204.296x300")
           output.should contain("-o Resolution=203x203dpi")
           output.should contain("-o TmxPaperCut=CutPerPage")
           output.should contain("-o TmxPaperReduction=Off")
@@ -273,9 +273,9 @@ describe Bon::Cli do
           output = stdout.to_s
           output.should contain("pdflatex -interaction=nonstopmode")
           output.should contain("gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite")
-          output.should contain("-dDEVICEWIDTHPOINTS=204.3")
+          output.should contain("-dDEVICEWIDTHPOINTS=204.296")
           output.should contain("lp -d EPSON_TM_m30III -n 1")
-          output.should contain("-o media=Custom.204.3x300")
+          output.should contain("-o media=Custom.204.296x300")
           output.should contain("-o Resolution=203x203dpi")
           output.should contain("001-receipt-print.pdf")
           output.should_not contain("001-receipt-print.png")

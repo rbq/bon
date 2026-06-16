@@ -25,6 +25,13 @@ describe Bon::PDF do
     Bon::PDF.format_points(Bon::PDF.pixels_to_points(width_px, 203)).should eq("204.296")
   end
 
+  it "converts 58 mm printable width to the common 384-dot dimension" do
+    width = Bon::Config.default_printable_width_pt(58.0)
+
+    Bon::PDF.points_to_pixels(width, 203).should eq(384)
+    Bon::PDF.format_points(width).should eq("136.197")
+  end
+
   it "builds a single raster crop command at printer resolution" do
     source_size = Bon::PDF::PageSize.new(226.772, 288.0)
     target_size = Bon::PDF::PageSize.new(

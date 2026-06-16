@@ -57,6 +57,13 @@ describe Bon::Cups do
     overridden.has_key?("media").should be_false
   end
 
+  it "generates 58 mm thermal media using the common 384-dot printable width" do
+    config = Bon::Config.new(paper_width_mm: 58.0)
+    options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(config.printable_width_pt, 300.0), {} of String => String)
+
+    options["media"].should eq("Custom.136.197x300")
+  end
+
   it "disables driver fit-to-page scaling by default" do
     config = Bon::Config.new
     options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)

@@ -90,13 +90,13 @@ describe Bon::Document do
         prepared = Bon::Document.prepare(source, dir, 1, config, false, true, output, error)
 
         prepared.path.should eq(File.join(dir, "001-receipt-print.pdf"))
-        prepared.size.width.should eq(204.3)
+        Bon::PDF.format_points(prepared.size.width).should eq("204.296")
         prepared.size.height.should eq(300.0)
         output.to_s.should contain("compile --root")
         output.to_s.should_not contain("--ppi")
         output.to_s.should contain("-sDEVICE=pdfwrite")
-        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.3")
-        File.read(gs_args).should contain("<</PageOffset [-11.236 0]>> setpagedevice")
+        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.296")
+        File.read(gs_args).should contain("<</PageOffset [-11.238 0]>> setpagedevice")
       end
     end
   end
@@ -165,15 +165,15 @@ describe Bon::Document do
         prepared = Bon::Document.prepare(source, dir, 1, config, false, true, output, error)
 
         prepared.path.should eq(File.join(dir, "001-receipt-print.pdf"))
-        prepared.size.width.should eq(204.3)
+        Bon::PDF.format_points(prepared.size.width).should eq("204.296")
         prepared.size.height.should eq(300.0)
         output.to_s.should contain("pdflatex -interaction=nonstopmode")
         output.to_s.should contain("-sDEVICE=pdfwrite")
-        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.3")
+        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.296")
         output.to_s.should_not contain("pngmono")
         output.to_s.should_not contain("pnggray")
         output.to_s.should_not contain("001-receipt-print.png")
-        File.read(gs_args).should contain("<</PageOffset [-11.236 0]>> setpagedevice")
+        File.read(gs_args).should contain("<</PageOffset [-11.238 0]>> setpagedevice")
       end
     end
   end
