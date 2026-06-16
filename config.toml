@@ -10,9 +10,13 @@ max_media_height_pt = 5669.3
 
 [render]
 typst_bin = "typst"
+typst_mode = "pdf"
 image_ppi = 203
 raster_ppi_multiplier = 2
 latex_engine = "auto"
+
+[simulate]
+background_tint = "#f5f1e0"
 
 [cups]
 copies = 1

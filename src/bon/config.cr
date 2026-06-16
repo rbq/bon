@@ -177,6 +177,7 @@ module Bon
     property cups_dry_run : Bool
     property cups_paper_cut : String?
     property cups_options : Hash(String, String)
+    property simulate_background_tint : String
 
     def initialize(@printer_name : String? = nil,
                    @printer_candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"],
@@ -195,7 +196,8 @@ module Bon
                    @cups_options = {
                      "Resolution"        => "203x203dpi",
                      "TmxPaperReduction" => "Off",
-                   })
+                   },
+                   @simulate_background_tint = "#f5f1e0")
       @printable_width_pt = printable_width_pt
     end
 
@@ -325,6 +327,9 @@ module Bon
         io << "raster_ppi_multiplier = #{@raster_ppi_multiplier}\n"
         io << "latex_engine = \"#{toml_escape(@latex_engine)}\"\n\n"
 
+        io << "[simulate]\n"
+        io << "background_tint = \"#{toml_escape(@simulate_background_tint)}\"\n\n"
+
         io << "[cups]\n"
         io << "copies = #{@cups_copies}\n"
         io << "dry_run = #{@cups_dry_run}\n"
@@ -372,6 +377,8 @@ module Bon
           @raster_ppi_multiplier = expect_int(key, value, source)
         when "render.latex_engine"
           @latex_engine = expect_string(key, value, source)
+        when "simulate.background_tint"
+          @simulate_background_tint = expect_string(key, value, source)
         when "cups.copies"
           @cups_copies = expect_int(key, value, source)
         when "cups.dry_run"
@@ -402,6 +409,7 @@ module Bon
       raise Error.new("render.typst_mode must be either \"pdf\" or \"raster\"") unless {"pdf", "raster"}.includes?(@typst_mode)
       raise Error.new("render.image_ppi must be positive") unless @image_ppi > 0
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
+      raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
       raise Error.new("cups.copies must be at least 1") unless @cups_copies >= 1
       if paper_cut = @cups_paper_cut
         raise Error.new("cups.paper_cut must be CutPerPage, CutPerJob, NoCut, or empty") unless {"CutPerPage", "CutPerJob", "NoCut"}.includes?(paper_cut)
@@ -456,6 +464,10 @@ module Bon
 
     private def toml_escape(value : String) : String
       value.gsub("\\", "\\\\").gsub("\"", "\\\"")
+    end
+
+    private def hex_rgb?(value : String) : Bool
+      !!value.match(/\A#?[0-9a-fA-F]{6}\z/)
     end
   end
 end

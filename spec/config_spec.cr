@@ -41,6 +41,9 @@ describe Bon::Config do
       typst_mode = "raster"
       raster_ppi_multiplier = 3
 
+      [simulate]
+      background_tint = "c8d0ff"
+
       [cups.options]
       Resolution = "180x180dpi"
       SomeFlag = true
@@ -50,6 +53,7 @@ describe Bon::Config do
     config.printable_width_pt.should eq(149.1)
     config.typst_mode.should eq("raster")
     config.raster_ppi_multiplier.should eq(3)
+    config.simulate_background_tint.should eq("c8d0ff")
     config.cups_options["Resolution"].should eq("180x180dpi")
     config.cups_options["SomeFlag"].should eq("true")
   end
@@ -60,6 +64,11 @@ describe Bon::Config do
 
   it "defaults Typst input preparation to PDF mode" do
     Bon::Config.default_toml.should contain("typst_mode = \"pdf\"")
+  end
+
+  it "includes the simulation background tint in generated TOML defaults" do
+    Bon::Config.default_toml.should contain("[simulate]")
+    Bon::Config.default_toml.should contain("background_tint = \"#f5f1e0\"")
   end
 
   it "uses automatic printable widths for common thermal paper sizes" do
@@ -130,6 +139,14 @@ describe Bon::Config do
     config = Bon::Config.new(cups_paper_cut: "Sometimes")
 
     expect_raises(Bon::Error, /cups.paper_cut/) do
+      config.validate!
+    end
+  end
+
+  it "rejects invalid simulation background tint values" do
+    config = Bon::Config.new(simulate_background_tint: "paper")
+
+    expect_raises(Bon::Error, /simulate.background_tint/) do
       config.validate!
     end
   end
