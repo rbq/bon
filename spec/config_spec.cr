@@ -35,6 +35,7 @@ describe Bon::Config do
       printable_width_pt = 149.1
 
       [render]
+      typst_mode = "raster"
       raster_ppi_multiplier = 3
 
       [cups.options]
@@ -44,6 +45,7 @@ describe Bon::Config do
 
     config.printer_candidates.should eq(["LOCAL"])
     config.printable_width_pt.should eq(149.1)
+    config.typst_mode.should eq("raster")
     config.raster_ppi_multiplier.should eq(3)
     config.cups_options["Resolution"].should eq("180x180dpi")
     config.cups_options["SomeFlag"].should eq("true")
@@ -51,6 +53,10 @@ describe Bon::Config do
 
   it "includes the raster PPI multiplier in generated TOML defaults" do
     Bon::Config.default_toml.should contain("raster_ppi_multiplier = 2")
+  end
+
+  it "defaults Typst input preparation to PDF mode" do
+    Bon::Config.default_toml.should contain("typst_mode = \"pdf\"")
   end
 
   it "does not force the USB printer in generated TOML defaults" do

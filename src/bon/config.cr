@@ -169,6 +169,7 @@ module Bon
     property min_media_pt : Float64
     property max_media_height_pt : Float64
     property typst_bin : String
+    property typst_mode : String
     property image_ppi : Int32
     property raster_ppi_multiplier : Int32
     property latex_engine : String
@@ -181,18 +182,19 @@ module Bon
                    @paper_width_mm = 80.0,
                    @printable_width_pt = 204.3,
                    @min_media_pt = 72.0,
-                    @max_media_height_pt = 5669.3,
-                    @typst_bin = "typst",
-                    @image_ppi = 203,
-                    @raster_ppi_multiplier = 2,
-                    @latex_engine = "auto",
+                   @max_media_height_pt = 5669.3,
+                   @typst_bin = "typst",
+                   @typst_mode = "pdf",
+                   @image_ppi = 203,
+                   @raster_ppi_multiplier = 2,
+                   @latex_engine = "auto",
                    @cups_copies = 1,
                    @cups_dry_run = false,
-                     @cups_options = {
-                       "Resolution" => "203x203dpi",
-                       "TmxPaperCut" => "CutPerJob",
-                       "TmxPaperReduction" => "Off",
-                     })
+                   @cups_options = {
+                     "Resolution"        => "203x203dpi",
+                     "TmxPaperCut"       => "CutPerJob",
+                     "TmxPaperReduction" => "Off",
+                   })
     end
 
     def self.load(cwd = Dir.current) : Config
@@ -278,6 +280,7 @@ module Bon
 
         io << "[render]\n"
         io << "typst_bin = \"#{toml_escape(@typst_bin)}\"\n"
+        io << "typst_mode = \"#{toml_escape(@typst_mode)}\"\n"
         io << "image_ppi = #{@image_ppi}\n"
         io << "raster_ppi_multiplier = #{@raster_ppi_multiplier}\n"
         io << "latex_engine = \"#{toml_escape(@latex_engine)}\"\n\n"
@@ -315,6 +318,8 @@ module Bon
           @max_media_height_pt = expect_number(key, value, source)
         when "render.typst_bin"
           @typst_bin = expect_string(key, value, source)
+        when "render.typst_mode"
+          @typst_mode = expect_string(key, value, source)
         when "render.image_ppi"
           @image_ppi = expect_int(key, value, source)
         when "render.raster_ppi_multiplier"
@@ -340,6 +345,7 @@ module Bon
       raise Error.new("paper.printable_width_pt must be positive") unless @printable_width_pt > 0
       raise Error.new("paper.min_media_pt must be positive") unless @min_media_pt > 0
       raise Error.new("paper.max_media_height_pt must be positive") unless @max_media_height_pt > 0
+      raise Error.new("render.typst_mode must be either \"pdf\" or \"raster\"") unless {"pdf", "raster"}.includes?(@typst_mode)
       raise Error.new("render.image_ppi must be positive") unless @image_ppi > 0
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
       raise Error.new("cups.copies must be at least 1") unless @cups_copies >= 1

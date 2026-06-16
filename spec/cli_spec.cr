@@ -155,6 +155,39 @@ describe Bon::Cli do
     end
   end
 
+  it "dry-runs Typst printing through a PDF-first cropped CUPS job" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "receipt.typ")
+      File.write(source, "#set page(width: 80mm, height: 300pt)\nHello\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["--dry-run", source], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          output = stdout.to_s
+          output.should contain("typst compile --root")
+          output.should_not contain("--ppi")
+          output.should_not contain("-f png")
+          output.should contain("gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite")
+          output.should contain("-dDEVICEWIDTHPOINTS=204.3")
+          output.should contain("lp -d EPSON_TM_m30III -n 1")
+          output.should contain("-o media=Custom.204.3x300")
+          output.should contain("-o Resolution=203x203dpi")
+          output.should contain("-o TmxPaperCut=CutPerJob")
+          output.should contain("-o TmxPaperReduction=Off")
+          output.should contain("001-receipt-print.pdf")
+          output.should_not contain("001-receipt-print.png")
+        end
+      end
+    end
+  end
+
   it "rejects unknown printer subcommands" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new
@@ -165,6 +198,51 @@ describe Bon::Cli do
     stdout.to_s.should eq("")
     stderr.to_s.should contain("error: Unknown printer command: delete")
   end
+end
+
+private def install_fake_print_tools(dir : String) : Nil
+  File.write(File.join(dir, "lp"), <<-SH)
+    #!/bin/sh
+    exit 0
+    SH
+  File.chmod(File.join(dir, "lp"), 0o755)
+
+  File.write(File.join(dir, "lpoptions"), <<-SH)
+    #!/bin/sh
+    printf '%s\n' 'PageSize/Media Size: *RP80x200 RP80x2000 Custom.WIDTHxHEIGHT'
+    printf '%s\n' 'Resolution/Resolution: *203x203dpi'
+    printf '%s\n' 'TmxPaperReduction/Paper Reduction: *Off Top Bottom Both'
+    printf '%s\n' 'TmxPaperCut/Paper Cut: NoCut *CutPerJob CutPerPage'
+    SH
+  File.chmod(File.join(dir, "lpoptions"), 0o755)
+
+  File.write(File.join(dir, "typst"), <<-SH)
+    #!/bin/sh
+    output=""
+    for arg do
+      output="$arg"
+    done
+    cat > "$output" <<'PDF'
+    %PDF-1.7
+    1 0 obj <</MediaBox [0 0 226.772 300]>> endobj
+    PDF
+    SH
+  File.chmod(File.join(dir, "typst"), 0o755)
+
+  File.write(File.join(dir, "gs"), <<-SH)
+    #!/bin/sh
+    output=""
+    for arg do
+      case "$arg" in
+        -sOutputFile=*) output="${arg#-sOutputFile=}" ;;
+      esac
+    done
+    cat > "$output" <<'PDF'
+    %PDF-1.7
+    1 0 obj <</MediaBox [0 0 204.3 300]>> endobj
+    PDF
+    SH
+  File.chmod(File.join(dir, "gs"), 0o755)
 end
 
 private def install_fake_lpstat(dir : String) : Nil

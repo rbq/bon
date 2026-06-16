@@ -5,7 +5,103 @@ require "spec"
 require "../src/bon/document"
 
 describe Bon::Document do
-  it "prepares Typst sources by rendering directly to a printer-resolution PNG" do
+  it "prepares Typst sources as PDFs by default" do
+    with_document_temp_dir do |dir|
+      source = File.join(dir, "receipt.typ")
+      fake_typst = File.join(dir, "typst")
+      args = File.join(dir, "typst-args.txt")
+      output = IO::Memory.new
+      error = IO::Memory.new
+
+      File.write(source, "#set page(width: 80mm, height: auto)\nHello\n")
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        printf '%s\n' "$@" > "$BON_TYPST_ARGS"
+        output=""
+        for arg do
+          output="$arg"
+        done
+        cat > "$output" <<'PDF'
+        %PDF-1.7
+        1 0 obj <</MediaBox [0 0 180 300]>> endobj
+        PDF
+        SH
+      File.chmod(fake_typst, 0o755)
+
+      with_document_env({"BON_TYPST_ARGS" => args}) do
+        config = Bon::Config.new(typst_bin: fake_typst)
+
+        prepared = Bon::Document.prepare(source, dir, 1, config, false, false, output, error)
+
+        prepared.path.should eq(File.join(dir, "001-receipt.pdf"))
+        prepared.size.width.should eq(180.0)
+        prepared.size.height.should eq(300.0)
+        typst_args = File.read(args)
+        typst_args.should contain("compile")
+        typst_args.should contain("--root")
+        typst_args.should_not contain("--ppi")
+        typst_args.should_not contain("-f")
+        typst_args.should_not contain("png")
+      end
+    end
+  end
+
+  it "center-crops wide Typst PDFs with Ghostscript pdfwrite" do
+    with_document_temp_dir do |dir|
+      source = File.join(dir, "receipt.typ")
+      fake_typst = File.join(dir, "typst")
+      fake_gs = File.join(dir, "gs")
+      gs_args = File.join(dir, "gs-args.txt")
+      output = IO::Memory.new
+      error = IO::Memory.new
+
+      File.write(source, "#set page(width: 80mm, height: 300pt)\nHello\n")
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        output=""
+        for arg do
+          output="$arg"
+        done
+        cat > "$output" <<'PDF'
+        %PDF-1.7
+        1 0 obj <</MediaBox [0 0 226.772 300]>> endobj
+        PDF
+        SH
+      File.chmod(fake_typst, 0o755)
+      File.write(fake_gs, <<-SH)
+        #!/bin/sh
+        printf '%s\n' "$@" > "$BON_GS_ARGS"
+        output=""
+        for arg do
+          case "$arg" in
+            -sOutputFile=*) output="${arg#-sOutputFile=}" ;;
+          esac
+        done
+        cat > "$output" <<'PDF'
+        %PDF-1.7
+        1 0 obj <</MediaBox [0 0 204.3 300]>> endobj
+        PDF
+        SH
+      File.chmod(fake_gs, 0o755)
+
+      with_document_env({"PATH" => "#{dir}:#{ENV["PATH"]?}", "BON_GS_ARGS" => gs_args}) do
+        config = Bon::Config.new(typst_bin: fake_typst)
+
+        prepared = Bon::Document.prepare(source, dir, 1, config, false, true, output, error)
+
+        prepared.path.should eq(File.join(dir, "001-receipt-print.pdf"))
+        prepared.size.width.should eq(204.3)
+        prepared.size.height.should eq(300.0)
+        output.to_s.should contain("compile --root")
+        output.to_s.should_not contain("--ppi")
+        output.to_s.should contain("-sDEVICE=pdfwrite")
+        output.to_s.should contain("-dDEVICEWIDTHPOINTS=204.3")
+        File.read(gs_args).should contain("<</PageOffset [-11.236 0]>> setpagedevice")
+      end
+    end
+  end
+
+  it "uses the legacy Typst raster pipeline only when configured" do
     with_document_temp_dir do |dir|
       source = File.join(dir, "receipt.typ")
       fake_typst = File.join(dir, "typst")
@@ -26,7 +122,7 @@ describe Bon::Document do
       File.chmod(fake_typst, 0o755)
 
       with_document_env({"BON_FAKE_PNG" => fake_png}) do
-        config = Bon::Config.new(image_ppi: 1, raster_ppi_multiplier: 2, typst_bin: fake_typst)
+        config = Bon::Config.new(typst_mode: "raster", image_ppi: 1, raster_ppi_multiplier: 2, typst_bin: fake_typst)
 
         prepared = Bon::Document.prepare(source, dir, 1, config, false, false, output, error)
 

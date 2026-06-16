@@ -7,7 +7,7 @@ require "./config"
 module Bon
   module PDF
     CROP_EPSILON_PT = 0.1
-    BOX_PATTERN = /\/(?:CropBox|MediaBox)\s*\[\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\]/
+    BOX_PATTERN     = /\/(?:CropBox|MediaBox)\s*\[\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\]/
 
     struct PageSize
       getter width : Float64
@@ -75,15 +75,8 @@ module Bon
 
       return PrintReady.new(path, size) if no_crop || size.width <= config.printable_width_pt + CROP_EPSILON_PT
 
-      target_width_px = points_to_pixels(config.printable_width_pt, config.image_ppi)
-      target_height_px = points_to_pixels(size.height, config.image_ppi)
-      target_size = PageSize.new(
-        pixels_to_points(target_width_px, config.image_ppi),
-        pixels_to_points(target_height_px, config.image_ppi)
-      )
-
-      crop_to_raster(path, output, size, target_size, config.image_ppi, config.raster_ppi_multiplier, dry_run, output_io, error_io)
-      verify_png_size(output, target_width_px, target_height_px) if File.exists?(output)
+      target_size = PageSize.new(config.printable_width_pt, size.height)
+      crop_to_width(path, output, config.printable_width_pt, dry_run, output_io, error_io)
       PrintReady.new(output, target_size)
     end
 
@@ -264,7 +257,7 @@ module Bon
                              when 2 then ((value.to_i + up.to_i) & 0xff).to_u8
                              when 3 then ((value.to_i + ((left.to_i + up.to_i) >> 1)) & 0xff).to_u8
                              when 4 then ((value.to_i + paeth(left.to_i, up.to_i, up_left.to_i)) & 0xff).to_u8
-                             else raise Error.new("Unsupported PNG filter type: #{filter_type}")
+                             else        raise Error.new("Unsupported PNG filter type: #{filter_type}")
                              end
         end
 

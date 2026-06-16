@@ -32,7 +32,7 @@ module Bon
       pdf = prepare_pdf(path, temp_dir, index, config, dry_run, output_io, error_io)
       ready = PDF.prepare_for_print(
         pdf,
-        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.png"),
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.pdf"),
         config,
         no_crop,
         dry_run,
@@ -75,7 +75,7 @@ module Bon
       Image.wrap_as_typst_pdf(path, pdf, temp_dir, config, dry_run, output_io, error_io)
       ready = PDF.prepare_for_print(
         pdf,
-        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.png"),
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.pdf"),
         config,
         false,
         dry_run,
@@ -86,6 +86,27 @@ module Bon
     end
 
     private def self.prepare_typst(path : String, temp_dir : String, index : Int32, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO, error_io : IO) : Prepared
+      return prepare_typst_raster(path, temp_dir, index, config, no_crop, dry_run, output_io, error_io) if config.typst_mode == "raster"
+
+      basename = File.basename(path, ".typ")
+      pdf = File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}.pdf")
+      Typst.compile(path, pdf, Typst.root_for(path), config, dry_run, output_io, error_io)
+
+      return Prepared.new(pdf, PDF::PageSize.new(1, 1)) unless File.exists?(pdf)
+
+      ready = PDF.prepare_for_print(
+        pdf,
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}-print.pdf"),
+        config,
+        no_crop,
+        dry_run,
+        output_io,
+        error_io
+      )
+      Prepared.new(ready.path, ready.size)
+    end
+
+    private def self.prepare_typst_raster(path : String, temp_dir : String, index : Int32, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO, error_io : IO) : Prepared
       basename = File.basename(path, ".typ")
       high_ppi = config.image_ppi * config.raster_ppi_multiplier
       raster = File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}-typst-#{high_ppi}ppi.png")
