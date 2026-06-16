@@ -28,7 +28,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 mise install
 mise run spec
 mise run build
-mise run run -- --list-printers
+mise run run -- printer list
 mise run run -- --dry-run ../Wetterbericht.typ
 bin/bon --dry-run ../Wetterbericht.typ
 ```

@@ -27,7 +27,7 @@ Runtime tools:
 List CUPS queues:
 
 ```sh
-mise run run -- --list-printers
+mise run run -- printer list
 ```
 
 Dry-run a Typst receipt without submitting an `lp` job:
@@ -42,6 +42,13 @@ Print one or more files:
 mise run run -- receipt.pdf image.png source.typ paper.tex
 ```
 
+Validate and inspect configuration:
+
+```sh
+mise run run -- config check
+mise run run -- config show
+```
+
 Build the executable and run it directly:
 
 ```sh
@@ -52,10 +59,21 @@ bin/bon --dry-run ../Wetterbericht.typ
 ## CLI
 
 ```text
-Usage: bon [options] FILE...
+Usage: bon [print] [options] FILE...
+       bon printer [list]
+       bon config <check|show>
 ```
 
-Options:
+Commands:
+
+- `print [options] FILE...` - print one or more files. This is the default command, so `bon FILE...` also works.
+- `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
+- `config check` - validate used config files and show source status.
+- `config show` - show the effective merged config, including built-in defaults.
+- `simulate` - render a receipt mockup.
+- `init` - write a default config file.
+
+Print options:
 
 - `-d, --printer NAME` - use a specific CUPS queue.
 - `-n, --copies N` - number of copies.
@@ -64,11 +82,10 @@ Options:
 - `--printable-width-pt N` - printable width in points.
 - `--no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
-- `--list-printers` - list discovered CUPS queues.
 - `--version` - show the CLI version.
 - `--help` - show usage help.
 
-If no files are passed and `--list-printers` is not set, `bon` fails with usage help.
+If no files are passed to the print command, `bon` fails with usage help.
 
 ## Configuration
 
@@ -85,8 +102,8 @@ Example:
 
 ```toml
 [printer]
-name = "EPSON_TM_m30III__USB_"
-candidates = ["EPSON_TM_m30III__USB_", "EPSON_TM_m30III"]
+name = ""
+candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"]
 
 [paper]
 width_mm = 80.0
@@ -110,7 +127,7 @@ TmxPaperCut = "CutPerJob"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 
