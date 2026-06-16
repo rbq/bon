@@ -64,6 +64,14 @@ describe Bon::Cups do
     options["media"].should eq("Custom.136.197x300")
   end
 
+  it "rejects documents taller than the configured CUPS media limit" do
+    config = Bon::Config.new(max_media_height_pt: 300.0)
+
+    expect_raises(Bon::Error, /max_media_height_pt/) do
+      Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 301.0), {} of String => String)
+    end
+  end
+
   it "disables driver fit-to-page scaling by default" do
     config = Bon::Config.new
     options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)

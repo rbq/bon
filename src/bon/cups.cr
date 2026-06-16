@@ -128,8 +128,11 @@ module Bon
       options["fit-to-page"] = "false" unless options.has_key?("fit-to-page")
 
       unless options.has_key?("media") || options.has_key?("PageSize") || options.has_key?("PageRegion")
+        if pdf.height > config.max_media_height_pt + PDF::CROP_EPSILON_PT
+          raise Error.new("Document height #{PDF.format_points(pdf.height)}pt exceeds paper.max_media_height_pt #{PDF.format_points(config.max_media_height_pt)}pt")
+        end
         width = clamp(pdf.width, config.min_media_pt, config.paper_width_pt)
-        height = clamp(pdf.height, config.min_media_pt, config.max_media_height_pt)
+        height = {pdf.height, config.min_media_pt}.max
         options["media"] = "Custom.#{PDF.format_points(width)}x#{PDF.format_points(height)}"
       end
 

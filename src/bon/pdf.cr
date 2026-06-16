@@ -35,18 +35,28 @@ module Bon
     end
 
     def self.first_page_size(path : String) : PageSize
-      data = ascii_projection(File.read(path))
-      match = data.match(BOX_PATTERN)
-      raise Error.new("Could not determine PDF page size from #{path}") unless match
+      page_sizes(path).first
+    end
 
-      left = match[1].to_f64
-      bottom = match[2].to_f64
-      right = match[3].to_f64
-      top = match[4].to_f64
-      width = (right - left).abs
-      height = (top - bottom).abs
-      raise Error.new("Invalid PDF page size in #{path}") unless width > 0 && height > 0
-      PageSize.new(width, height)
+    def self.page_sizes(path : String) : Array(PageSize)
+      data = ascii_projection(File.read(path))
+      sizes = [] of PageSize
+      data.scan(BOX_PATTERN) do |match|
+        left = match[1].to_f64
+        bottom = match[2].to_f64
+        right = match[3].to_f64
+        top = match[4].to_f64
+        width = (right - left).abs
+        height = (top - bottom).abs
+        sizes << PageSize.new(width, height) if width > 0 && height > 0
+      end
+      raise Error.new("Could not determine PDF page size from #{path}") if sizes.empty?
+      sizes
+    end
+
+    def self.print_size(path : String) : PageSize
+      sizes = page_sizes(path)
+      PageSize.new(sizes.max_of(&.width), sizes.max_of(&.height))
     end
 
     private def self.ascii_projection(data : String) : String
@@ -58,7 +68,7 @@ module Bon
     end
 
     def self.ensure_width_policy(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
-      size = first_page_size(path)
+      size = print_size(path)
       if size.width > config.paper_width_pt + CROP_EPSILON_PT
         raise Error.new("PDF width #{format_points(size.width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
       end
@@ -68,7 +78,7 @@ module Bon
     end
 
     def self.prepare_for_print(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : PrintReady
-      size = first_page_size(path)
+      size = print_size(path)
       if size.width > config.paper_width_pt + CROP_EPSILON_PT
         raise Error.new("PDF width #{format_points(size.width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
       end
@@ -81,7 +91,7 @@ module Bon
     end
 
     def self.crop_to_width(source : String, output : String, target_width : Float64, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
-      size = first_page_size(source)
+      size = print_size(source)
       left_crop = (size.width - target_width) / 2.0
       gs = Command.require_executable("gs")
       Command.run([

@@ -13,6 +13,40 @@ describe Bon::PDF do
     end
   end
 
+  it "scans later PDF boxes for conservative print sizing" do
+    File.tempfile("bon-pdf", ".pdf") do |file|
+      file.print("%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 200]>> endobj\n2 0 obj <</CropBox [0 0 120 350]>> endobj\n")
+      file.flush
+
+      size = Bon::PDF.print_size(file.path)
+
+      size.width.should eq(120.0)
+      size.height.should eq(350.0)
+    end
+  end
+
+  it "rejects a later PDF box wider than the physical paper" do
+    File.tempfile("bon-pdf", ".pdf") do |file|
+      file.print("%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 200]>> endobj\n2 0 obj <</MediaBox [0 0 300 200]>> endobj\n")
+      file.flush
+
+      expect_raises(Bon::Error, /exceeds/) do
+        Bon::PDF.prepare_for_print(file.path, "out.pdf", Bon::Config.new(paper_width_mm: 80.0), true, true)
+      end
+    end
+  end
+
+  it "uses later taller PDF boxes for print-ready size" do
+    File.tempfile("bon-pdf", ".pdf") do |file|
+      file.print("%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 200]>> endobj\n2 0 obj <</MediaBox [0 0 100 350]>> endobj\n")
+      file.flush
+
+      ready = Bon::PDF.prepare_for_print(file.path, "out.pdf", Bon::Config.new, true, true)
+
+      ready.size.height.should eq(350.0)
+    end
+  end
+
   it "formats point values without unnecessary decimals" do
     Bon::PDF.format_points(204.30).should eq("204.3")
     Bon::PDF.format_points(72.0).should eq("72")
