@@ -165,7 +165,7 @@ module Bon
     property printer_name : String?
     property printer_candidates : Array(String)
     property paper_width_mm : Float64
-    property printable_width_pt : Float64
+    @printable_width_pt : Float64?
     property min_media_pt : Float64
     property max_media_height_pt : Float64
     property typst_bin : String
@@ -181,7 +181,7 @@ module Bon
     def initialize(@printer_name : String? = nil,
                    @printer_candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"],
                    @paper_width_mm = 80.0,
-                   @printable_width_pt = 204.3,
+                   printable_width_pt : Float64? = nil,
                    @min_media_pt = 72.0,
                    @max_media_height_pt = 5669.3,
                    @typst_bin = "typst",
@@ -196,6 +196,39 @@ module Bon
                      "Resolution"        => "203x203dpi",
                      "TmxPaperReduction" => "Off",
                    })
+      @printable_width_pt = printable_width_pt
+    end
+
+    def printable_width_pt : Float64
+      @printable_width_pt || self.class.default_printable_width_pt(@paper_width_mm)
+    end
+
+    def printable_width_pt=(value : Float64) : Float64
+      @printable_width_pt = value <= 0 ? nil : value
+      value
+    end
+
+    def printable_width_pt=(value : Nil) : Nil
+      @printable_width_pt = nil
+    end
+
+    def explicit_printable_width_pt? : Bool
+      !@printable_width_pt.nil?
+    end
+
+    def self.default_printable_width_pt(paper_width_mm : Float64) : Float64
+      # Common 203 dpi thermal mechanisms expose printable dot widths smaller
+      # than their nominal paper width: 58 mm usually prints 384 dots and
+      # 80 mm usually prints 576 dots. Use these known widths before falling
+      # back to a conservative ~4 mm side margin for less common paper sizes.
+      printable_mm = if paper_width_mm <= 60.0
+                       384.0 / 203.0 * 25.4
+                     elsif paper_width_mm <= 82.0
+                       576.0 / 203.0 * 25.4
+                     else
+                       {paper_width_mm - 8.0, 1.0}.max
+                     end
+      printable_mm * 72.0 / 25.4
     end
 
     def self.load(cwd = Dir.current) : Config
@@ -275,7 +308,13 @@ module Bon
 
         io << "[paper]\n"
         io << "width_mm = #{@paper_width_mm}\n"
-        io << "printable_width_pt = #{@printable_width_pt}\n"
+        if printable_width = @printable_width_pt
+          io << "printable_width_pt = #{printable_width}\n"
+        elsif comment_nil_name
+          io << "printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots\n"
+        else
+          io << "printable_width_pt = #{printable_width_pt}\n"
+        end
         io << "min_media_pt = #{@min_media_pt}\n"
         io << "max_media_height_pt = #{@max_media_height_pt}\n\n"
 
@@ -317,7 +356,8 @@ module Bon
         when "paper.width_mm"
           @paper_width_mm = expect_number(key, value, source)
         when "paper.printable_width_pt"
-          @printable_width_pt = expect_number(key, value, source)
+          printable_width = expect_number(key, value, source)
+          @printable_width_pt = printable_width <= 0 ? nil : printable_width
         when "paper.min_media_pt"
           @min_media_pt = expect_number(key, value, source)
         when "paper.max_media_height_pt"
@@ -351,7 +391,12 @@ module Bon
 
     def validate! : Nil
       raise Error.new("paper.width_mm must be positive") unless @paper_width_mm > 0
-      raise Error.new("paper.printable_width_pt must be positive") unless @printable_width_pt > 0
+      if printable_width = @printable_width_pt
+        raise Error.new("paper.printable_width_pt must be positive, or 0 for automatic sizing") unless printable_width > 0
+      end
+      if printable_width_pt > paper_width_pt + 0.1
+        raise Error.new("paper.printable_width_pt must not exceed paper.width_mm physical width")
+      end
       raise Error.new("paper.min_media_pt must be positive") unless @min_media_pt > 0
       raise Error.new("paper.max_media_height_pt must be positive") unless @max_media_height_pt > 0
       raise Error.new("render.typst_mode must be either \"pdf\" or \"raster\"") unless {"pdf", "raster"}.includes?(@typst_mode)
