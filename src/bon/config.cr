@@ -177,6 +177,8 @@ module Bon
     property cups_dry_run : Bool
     property cups_options : Hash(String, String)
     property simulate_background_tint : String
+    property simulate_foreground_color : String
+    property simulate_foreground_fade : Float64
 
     def initialize(@printer_name : String? = nil,
                    @printer_candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"],
@@ -196,7 +198,9 @@ module Bon
                      "TmxPaperCut"       => "CutPerPage",
                      "TmxPaperReduction" => "Off",
                    },
-                   @simulate_background_tint = "#f5f1e0")
+                   @simulate_background_tint = "#f5f1e0",
+                   @simulate_foreground_color = "#232320",
+                   @simulate_foreground_fade = 1.0)
       @printable_width_pt = printable_width_pt
     end
 
@@ -327,7 +331,9 @@ module Bon
         io << "latex_engine = \"#{toml_escape(@latex_engine)}\"\n\n"
 
         io << "[simulate]\n"
-        io << "background_tint = \"#{toml_escape(@simulate_background_tint)}\"\n\n"
+        io << "background_tint = \"#{toml_escape(@simulate_background_tint)}\"\n"
+        io << "foreground_color = \"#{toml_escape(@simulate_foreground_color)}\"\n"
+        io << "foreground_fade = #{@simulate_foreground_fade}\n\n"
 
         io << "[cups]\n"
         io << "copies = #{@cups_copies}\n"
@@ -373,6 +379,10 @@ module Bon
           @latex_engine = expect_string(key, value, source)
         when "simulate.background_tint"
           @simulate_background_tint = expect_string(key, value, source)
+        when "simulate.foreground_color"
+          @simulate_foreground_color = expect_string(key, value, source)
+        when "simulate.foreground_fade"
+          @simulate_foreground_fade = expect_number(key, value, source)
         when "cups.copies"
           @cups_copies = expect_int(key, value, source)
         when "cups.dry_run"
@@ -401,6 +411,8 @@ module Bon
       raise Error.new("render.image_ppi must be positive") unless @image_ppi > 0
       raise Error.new("render.raster_ppi_multiplier must be positive") unless @raster_ppi_multiplier > 0
       raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
+      raise Error.new("simulate.foreground_color must be a hex RGB value like #232320") unless hex_rgb?(@simulate_foreground_color)
+      raise Error.new("simulate.foreground_fade must be between 0.0 and 1.0") unless @simulate_foreground_fade >= 0.0 && @simulate_foreground_fade <= 1.0
       raise Error.new("cups.copies must be at least 1") unless @cups_copies >= 1
     end
 

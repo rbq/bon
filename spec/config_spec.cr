@@ -45,6 +45,8 @@ describe Bon::Config do
 
       [simulate]
       background_tint = "c8d0ff"
+      foreground_color = "#112233"
+      foreground_fade = 0.5
 
       [cups.options]
       Resolution = "180x180dpi"
@@ -56,6 +58,8 @@ describe Bon::Config do
     config.typst_mode.should eq("raster")
     config.raster_ppi_multiplier.should eq(3)
     config.simulate_background_tint.should eq("c8d0ff")
+    config.simulate_foreground_color.should eq("#112233")
+    config.simulate_foreground_fade.should eq(0.5)
     config.cups_options["Resolution"].should eq("180x180dpi")
     config.cups_options["SomeFlag"].should eq("true")
   end
@@ -71,6 +75,14 @@ describe Bon::Config do
   it "includes the simulation background tint in generated TOML defaults" do
     Bon::Config.default_toml.should contain("[simulate]")
     Bon::Config.default_toml.should contain("background_tint = \"#f5f1e0\"")
+  end
+
+  it "includes simulate foreground defaults in generated TOML defaults" do
+    defaults = Bon::Config.default_toml
+
+    defaults.should contain("[simulate]")
+    defaults.should contain("foreground_color = \"#232320\"")
+    defaults.should contain("foreground_fade = 1.0")
   end
 
   it "uses automatic printable widths for common thermal paper sizes" do
@@ -153,6 +165,16 @@ describe Bon::Config do
 
     expect_raises(Bon::Error, /simulate.background_tint/) do
       config.validate!
+    end
+  end
+
+  it "rejects invalid simulate foreground settings" do
+    expect_raises(Bon::Error, /simulate.foreground_color/) do
+      Bon::Config.new(simulate_foreground_color: "black").validate!
+    end
+
+    expect_raises(Bon::Error, /simulate.foreground_fade/) do
+      Bon::Config.new(simulate_foreground_fade: 1.1).validate!
     end
   end
 end

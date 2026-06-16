@@ -10,10 +10,13 @@ require "./typst"
 
 module Bon
   module Simulate
-    DEFAULT_PPI        = 203
-    DEFAULT_MOCKUP_PPI = 406
-    PAPER_RGB          = {245, 241, 224}
-    INK_RGB            = {35, 35, 32}
+    alias RGB = Tuple(Int32, Int32, Int32)
+
+    DEFAULT_PPI             = 203
+    DEFAULT_MOCKUP_PPI      = 406
+    DEFAULT_FOREGROUND_FADE = 1.0
+    PAPER_RGB               = {245, 241, 224}
+    INK_RGB                 = {35, 35, 32}
 
     class Options
       property format : String
@@ -29,6 +32,8 @@ module Bon
       property out_dir : String?
       property typst_bin : String
       property background_tint : String
+      property foreground_rgb : RGB
+      property foreground_fade : Float64
 
       def initialize(@format = "png",
                      @paper_mm = 80.0,
@@ -42,7 +47,9 @@ module Bon
                      @bottom_mm = 14.0,
                      @out_dir = nil,
                      @typst_bin = "typst",
-                     @background_tint = "#f5f1e0")
+                     @background_tint = "#f5f1e0",
+                     @foreground_rgb = INK_RGB,
+                     @foreground_fade = DEFAULT_FOREGROUND_FADE)
       end
     end
 
@@ -96,7 +103,7 @@ module Bon
         render_jpeg_to_png(source, intermediate_png, temp_dir, options, output_io, error_io)
       end
 
-      simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, options.top_mm, options.bottom_mm, seed_for(source), source_width, paper_rgb)
+      simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, options.top_mm, options.bottom_mm, seed_for(source), source_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
       convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
       output
     end
@@ -108,7 +115,7 @@ module Bon
       File.join(File.expand_path(output_dir), "#{File.basename(source_path, ext)}_#{mm_label(options.paper_mm)}mm-printout.#{options.format}")
     end
 
-    def self.simulate_png(source_png : String, output_png : String, paper_mm : Float64, content_width_mm : Float64, mockup_ppi : Int32, top_mm : Float64, bottom_mm : Float64, seed : Int32, source_width_mm : Float64? = nil, paper_rgb = PAPER_RGB) : Nil
+    def self.simulate_png(source_png : String, output_png : String, paper_mm : Float64, content_width_mm : Float64, mockup_ppi : Int32, top_mm : Float64, bottom_mm : Float64, seed : Int32, source_width_mm : Float64? = nil, paper_rgb = PAPER_RGB, foreground_rgb : RGB = INK_RGB, foreground_fade : Float64 = DEFAULT_FOREGROUND_FADE) : Nil
       source = read_png(source_png)
       densities = source_densities(source)
 
@@ -150,16 +157,16 @@ module Bon
           next if coverage < 0.96 && threshold > coverage
 
           strength = 0.78 + hash_byte(sx, sy, seed + 131) / 1275.0
-          strength = {0.95, coverage * strength}.min
+          strength = {0.95, coverage * strength * foreground_fade}.min
           x = content_x + dx
           y = top + dy
           offset = (y * paper_width + x) * 3
           base_red = rgb[offset]
           base_green = rgb[offset + 1]
           base_blue = rgb[offset + 2]
-          rgb[offset] = blend(base_red, INK_RGB[0], strength).to_u8
-          rgb[offset + 1] = blend(base_green, INK_RGB[1], strength).to_u8
-          rgb[offset + 2] = blend(base_blue, INK_RGB[2], strength).to_u8
+          rgb[offset] = blend(base_red, foreground_rgb[0], strength).to_u8
+          rgb[offset + 1] = blend(base_green, foreground_rgb[1], strength).to_u8
+          rgb[offset + 2] = blend(base_blue, foreground_rgb[2], strength).to_u8
         end
       end
 
@@ -175,6 +182,14 @@ module Bon
       match = value.match(/\A#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})\z/)
       raise Error.new("background tint must be a hex RGB color like #f5f1e0") unless match
       {match[1].to_i(16), match[2].to_i(16), match[3].to_i(16)}
+    end
+
+    def self.parse_color(value : String) : RGB
+      match = value.match(/\A#?([0-9a-fA-F]{6})\z/)
+      raise Error.new("foreground color must be a hex RGB value like #232320") unless match
+
+      hex = match[1]
+      {hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16)}
     end
 
     def self.write_png(path : String, width : Int32, height : Int32, rgb : Bytes) : Nil

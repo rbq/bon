@@ -89,6 +89,34 @@ describe Bon::Simulate do
       dark_pixel_count(mockup).should eq(0)
     end
   end
+
+  it "parses foreground colors from hex RGB values" do
+    Bon::Simulate.parse_color("#112233").should eq({17, 34, 51})
+    Bon::Simulate.parse_color("112233").should eq({17, 34, 51})
+  end
+
+  it "applies foreground color and fade without changing the default path" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "source.png")
+      white_output = File.join(dir, "white.png")
+      faded_output = File.join(dir, "faded.png")
+      red_output = File.join(dir, "red.png")
+
+      Bon::Simulate.write_png(source, 1, 1, Bytes[0, 0, 0])
+      Bon::Simulate.simulate_png(source, faded_output, 1.0, 1.0, 25, 0.0, 0.0, 42, nil, Bon::Simulate::PAPER_RGB, Bon::Simulate::INK_RGB, 0.0)
+      Bon::Simulate.write_png(source, 1, 1, Bytes[255, 255, 255])
+      Bon::Simulate.simulate_png(source, white_output, 1.0, 1.0, 25, 0.0, 0.0, 42)
+
+      pixel_at(faded_output, 0).should eq(pixel_at(white_output, 0))
+
+      Bon::Simulate.write_png(source, 1, 1, Bytes[0, 0, 0])
+      Bon::Simulate.simulate_png(source, red_output, 1.0, 1.0, 25, 0.0, 0.0, 42, nil, Bon::Simulate::PAPER_RGB, {255, 0, 0}, 1.0)
+
+      red, green, blue = pixel_at(red_output, 0)
+      red.should be > green
+      red.should be > blue
+    end
+  end
 end
 
 describe Bon::Cli do
@@ -150,6 +178,55 @@ describe Bon::Cli do
       end
     end
   end
+
+  it "uses configured simulate foreground options" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "receipt.typ")
+      fake_png = File.join(dir, "content.png")
+      fake_typst = File.join(dir, "typst")
+      xdg_config = File.join(dir, "xdg")
+
+      File.write(source, "#set page(width: 1mm, height: auto)\nHello\n")
+      Bon::Simulate.write_png(fake_png, 1, 1, Bytes[0, 0, 0])
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        output=""
+        for arg do
+          output="$arg"
+        done
+        cp "$BON_FAKE_PNG" "$output"
+        SH
+      File.chmod(fake_typst, 0o755)
+
+      with_env({"BON_FAKE_PNG" => fake_png, "XDG_CONFIG_HOME" => xdg_config}) do
+        Dir.cd(dir) do
+          File.write("config.toml", <<-TOML)
+            [paper]
+            width_mm = 1.0
+            printable_width_pt = 1.0
+
+            [render]
+            image_ppi = 25
+
+            [simulate]
+            foreground_color = "#ff0000"
+            foreground_fade = 1.0
+          TOML
+
+          stdout = IO::Memory.new
+          stderr = IO::Memory.new
+
+          status = Bon::Cli.run(["simulate", "--typst-bin=#{fake_typst}", "--top-mm=0", "--bottom-mm=0", File.basename(source)], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          red, green, blue = pixel_at(stdout.to_s.strip, 0)
+          red.should be > green
+          red.should be > blue
+        end
+      end
+    end
+  end
 end
 
 private def dark_pixel_count(raster : Bon::Simulate::Raster) : Int32
@@ -159,6 +236,12 @@ private def dark_pixel_count(raster : Bon::Simulate::Raster) : Int32
     count += 1 if raster.pixels[offset].to_i < 150 && raster.pixels[offset + 1].to_i < 150 && raster.pixels[offset + 2].to_i < 150
   end
   count
+end
+
+private def pixel_at(path : String, index : Int32) : Tuple(UInt8, UInt8, UInt8)
+  raster = Bon::Simulate.read_png(path)
+  offset = index * raster.channels
+  {raster.pixels[offset], raster.pixels[offset + 1], raster.pixels[offset + 2]}
 end
 
 private def with_temp_dir(& : String ->) : Nil

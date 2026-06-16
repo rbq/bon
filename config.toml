@@ -17,6 +17,8 @@ latex_engine = "auto"
 
 [simulate]
 background_tint = "#f5f1e0"
+foreground_color = "#232320"
+foreground_fade = 1.0
 
 [cups]
 copies = 1

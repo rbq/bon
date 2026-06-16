@@ -294,7 +294,9 @@ module Bon
         printable_width_auto: !config.explicit_printable_width_pt?,
         ppi: config.image_ppi,
         typst_bin: config.typst_bin,
-        background_tint: config.simulate_background_tint
+        background_tint: config.simulate_background_tint,
+        foreground_rgb: Simulate.parse_color(config.simulate_foreground_color),
+        foreground_fade: config.simulate_foreground_fade
       )
       files = [] of String
       show_help = [false]
@@ -328,6 +330,8 @@ module Bon
         parser.on("--bottom-mm=N", "Paper shown below the printed content") { |value| options.bottom_mm = value.to_f64 }
         parser.on("--no-crop", "Do not center-crop content wider than printable width") { options.no_crop = true }
         parser.on("--background-tint=HEX", "Paper background tint as #RRGGBB") { |value| options.background_tint = value }
+        parser.on("--foreground-color=HEX", "Mockup foreground color, for example #232320") { |value| options.foreground_rgb = Simulate.parse_color(value) }
+        parser.on("--foreground-fade=N", "Mockup foreground opacity from 0.0 to 1.0") { |value| options.foreground_fade = value.to_f64 }
         parser.on("--out-dir=DIR", "Directory for generated outputs") do |value|
           options.out_dir = File.expand_path(value)
         end
@@ -350,6 +354,7 @@ module Bon
         raise Error.new("--content-mm must not exceed --paper-mm") if content_mm > options.paper_mm
       end
       raise Error.new("--top-mm and --bottom-mm cannot be negative") if options.top_mm < 0 || options.bottom_mm < 0
+      raise Error.new("--foreground-fade must be between 0.0 and 1.0") unless options.foreground_fade >= 0.0 && options.foreground_fade <= 1.0
       Simulate.parse_rgb(options.background_tint)
     end
 
