@@ -58,5 +58,6 @@ When modifying the application, keep all of the following in sync:
 - Image inputs that need center-cropping fall back to a temporary Typst wrapper PDF and Ghostscript crop.
 - Simulation supports Typst and PNG/JPEG inputs; PNGs are read directly and JPEGs are rasterized through a temporary Typst wrapper.
 - Simulation uses configured physical paper width, automatic/configured printable width, crop policy, `render.image_ppi`, and `[simulate] background_tint` when generating mockups.
+- Simulated mockups default to foreground color `#232320` and foreground fade `1.0`; keep those defaults to preserve the established mockup look.
 - LaTeX `auto` mode tries `latexmk -pdf`, then `tectonic`, then `pdflatex`.
 - Width policy: pages wider than physical paper width fail; pages wider than printable width are center-cropped with Ghostscript unless `--no-crop` is set.

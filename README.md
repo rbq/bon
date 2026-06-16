@@ -113,6 +113,8 @@ Simulate options:
 - `--typst-bin PATH` - Typst executable to use.
 - `--no-crop` - do not center-crop content wider than printable width.
 - `--background-tint HEX` - paper background tint as `#RRGGBB` or `RRGGBB`.
+- `--foreground-color HEX` - mockup foreground color as `#RRGGBB` or `RRGGBB`.
+- `--foreground-fade N` - mockup foreground opacity from `0.0` to `1.0`.
 
 ## Configuration
 
@@ -147,6 +149,8 @@ latex_engine = "auto"
 
 [simulate]
 background_tint = "#f5f1e0"
+foreground_color = "#232320"
+foreground_fade = 1.0
 
 [cups]
 copies = 1
@@ -158,7 +162,7 @@ TmxPaperCut = "CutPerPage"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `simulate.foreground_color` and `simulate.foreground_fade` control the mockup ink color and opacity while preserving the current look at their defaults. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 
@@ -174,7 +178,7 @@ For each input, `bon`:
 8. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
 9. Runs `lp` with the configured queue, copies, options, and final document path.
 
-`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`.
+`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags.
 
 ## Development
 
