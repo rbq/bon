@@ -50,9 +50,7 @@ module Bon
       end
     end
 
-    def self.discover(config : Config) : Queue
-      available_queues = queues
-
+    def self.discover(config : Config, available_queues : Array(Queue) = queues) : Queue
       if name = config.printer_name
         queue = available_queues.find { |candidate| candidate.name == name }
         raise Error.new("Configured printer not found: #{name}") unless queue
@@ -60,14 +58,25 @@ module Bon
         return queue
       end
 
-      config.printer_candidates.each do |candidate_name|
-        queue = available_queues.find { |candidate| candidate.name == candidate_name && candidate.usable? }
-        return queue if queue
+      candidate_order = Hash(String, Int32).new
+      config.printer_candidates.each_with_index do |candidate_name, index|
+        candidate_order[candidate_name] ||= index
       end
 
-      thermal = available_queues.select { |queue| queue.usable? && queue.thermal? }
-      thermal.sort_by! { |queue| {queue.usb? ? 0 : 1, queue.name} }
-      thermal.first? || raise Error.new("No usable thermal CUPS printer found")
+      discoverable = available_queues.select do |queue|
+        queue.usable? && (candidate_order.has_key?(queue.name) || queue.thermal?)
+      end
+      discoverable.sort_by! do |queue|
+        # CUPS can leave a disconnected USB queue enabled and "idle", so prefer
+        # non-USB queues during automatic discovery. `printer.name` remains the
+        # explicit escape hatch for forcing a specific queue.
+        {
+          queue.usb? ? 1 : 0,
+          candidate_order[queue.name]? || Int32::MAX,
+          queue.name,
+        }
+      end
+      discoverable.first? || raise Error.new("No usable configured or thermal CUPS printer found")
     end
 
     def self.queues : Array(Queue)

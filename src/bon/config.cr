@@ -135,6 +135,32 @@ module Bon
     end
   end
 
+  struct ConfigSource
+    getter label : String
+    getter path : String
+
+    def initialize(@label : String, @path : String)
+    end
+  end
+
+  struct ConfigSourceStatus
+    getter label : String
+    getter path : String
+    getter exists : Bool
+    getter used : Bool
+
+    def initialize(@label : String, @path : String, @exists : Bool, @used : Bool)
+    end
+  end
+
+  struct LoadedConfig
+    getter config : Config
+    getter sources : Array(ConfigSource)
+
+    def initialize(@config : Config, @sources : Array(ConfigSource))
+    end
+  end
+
   class Config
     property printer_name : String?
     property printer_candidates : Array(String)
@@ -151,7 +177,7 @@ module Bon
     property cups_options : Hash(String, String)
 
     def initialize(@printer_name : String? = nil,
-                   @printer_candidates = ["EPSON_TM_m30III__USB_", "EPSON_TM_m30III"],
+                   @printer_candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"],
                    @paper_width_mm = 80.0,
                    @printable_width_pt = 204.3,
                    @min_media_pt = 72.0,
@@ -170,17 +196,43 @@ module Bon
     end
 
     def self.load(cwd = Dir.current) : Config
+      load_with_sources(cwd).config
+    end
+
+    def self.load_with_sources(cwd = Dir.current) : LoadedConfig
       config = new
-      global_path.try { |path| config.overlay_file(path) if File.exists?(path) }
-      local = File.join(cwd, "config.toml")
-      legacy_local = File.join(cwd, "bon", "config.toml")
-      if File.exists?(local)
-        config.overlay_file(local)
-      elsif File.exists?(legacy_local)
-        config.overlay_file(legacy_local)
+      sources = used_sources(cwd)
+      sources.each do |source|
+        config.overlay_file(source.path)
       end
       config.validate!
-      config
+      LoadedConfig.new(config, sources)
+    end
+
+    def self.source_statuses(cwd = Dir.current) : Array(ConfigSourceStatus)
+      statuses = [] of ConfigSourceStatus
+      if path = global_path
+        exists = File.exists?(path)
+        statuses << ConfigSourceStatus.new("global", path, exists, exists)
+      end
+
+      local = File.join(cwd, "config.toml")
+      legacy_local = File.join(cwd, "bon", "config.toml")
+      local_exists = File.exists?(local)
+      legacy_exists = File.exists?(legacy_local)
+      statuses << ConfigSourceStatus.new("local", local, local_exists, local_exists)
+      statuses << ConfigSourceStatus.new("legacy local", legacy_local, legacy_exists, !local_exists && legacy_exists)
+      statuses
+    end
+
+    def self.used_sources(cwd = Dir.current) : Array(ConfigSource)
+      source_statuses(cwd).select(&.used).map { |status| ConfigSource.new(status.label, status.path) }
+    end
+
+    def self.validate_file!(path : String) : Nil
+      config = new
+      config.overlay_file(path)
+      config.validate!
     end
 
     def self.global_path : String?
@@ -197,12 +249,22 @@ module Bon
     end
 
     def to_toml : String
+      build_toml(comment_nil_name: true)
+    end
+
+    def to_effective_toml : String
+      build_toml(comment_nil_name: false)
+    end
+
+    private def build_toml(comment_nil_name : Bool) : String
       String.build do |io|
         io << "[printer]\n"
         if name = @printer_name
           io << "name = \"#{toml_escape(name)}\"\n"
+        elsif comment_nil_name
+          io << "# name = \"EPSON_TM_m30III\"\n"
         else
-          io << "# name = \"EPSON_TM_m30III__USB_\"\n"
+          io << "name = \"\"\n"
         end
         io << "candidates = ["
         io << @printer_candidates.map { |candidate| "\"#{toml_escape(candidate)}\"" }.join(", ")
@@ -239,7 +301,8 @@ module Bon
       values.each do |key, value|
         case key
         when "printer.name"
-          @printer_name = expect_string(key, value, source)
+          name = expect_string(key, value, source)
+          @printer_name = name.empty? ? nil : name
         when "printer.candidates"
           @printer_candidates = expect_string_array(key, value, source)
         when "paper.width_mm"

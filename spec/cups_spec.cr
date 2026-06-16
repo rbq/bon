@@ -18,6 +18,35 @@ describe Bon::Cups do
     queues[1].usable?.should be_false
   end
 
+  it "discovers a network thermal queue before an idle USB queue" do
+    queues = [
+      Bon::Cups::Queue.new("EPSON_TM_m30III__USB_", "usb://EPSON/TM-m30III", true, "is idle.  enabled since today"),
+      Bon::Cups::Queue.new("EPSON_TM_m30III", "dnssd://EPSON%20TM-m30III._printer._tcp.local/", true, "is idle.  enabled since today"),
+    ]
+
+    Bon::Cups.discover(Bon::Config.new, queues).name.should eq("EPSON_TM_m30III")
+  end
+
+  it "uses candidate order between queues with the same connection type" do
+    config = Bon::Config.new(printer_candidates: ["Preferred", "Fallback"])
+    queues = [
+      Bon::Cups::Queue.new("Fallback", "ipp://fallback/printer", true, "is idle.  enabled since today"),
+      Bon::Cups::Queue.new("Preferred", "ipp://preferred/printer", true, "is idle.  enabled since today"),
+    ]
+
+    Bon::Cups.discover(config, queues).name.should eq("Preferred")
+  end
+
+  it "keeps an explicit printer name authoritative" do
+    config = Bon::Config.new(printer_name: "EPSON_TM_m30III__USB_")
+    queues = [
+      Bon::Cups::Queue.new("EPSON_TM_m30III__USB_", "usb://EPSON/TM-m30III", true, "is idle.  enabled since today"),
+      Bon::Cups::Queue.new("EPSON_TM_m30III", "dnssd://EPSON%20TM-m30III._printer._tcp.local/", true, "is idle.  enabled since today"),
+    ]
+
+    Bon::Cups.discover(config, queues).name.should eq("EPSON_TM_m30III__USB_")
+  end
+
   it "adds dynamic media unless a media-like option already exists" do
     config = Bon::Config.new
     options = Bon::Cups.build_options(config, Bon::PDF::PageSize.new(180.0, 300.0), {} of String => String)

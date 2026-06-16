@@ -17,7 +17,6 @@ module Bon
     def initialize(@argv : Array(String), @output_io : IO = STDOUT, @error_io : IO = STDERR)
       @files = [] of String
       @cli_options = Hash(String, String).new
-      @list_printers = false
       @no_crop = false
       @show_help = false
       @show_version = false
@@ -32,6 +31,10 @@ module Bon
         run_simulate(argv)
       when "init"
         run_init(argv)
+      when "printer"
+        run_printer(argv)
+      when "config"
+        run_config(argv)
       else
         raise Error.new("Unknown command: #{command}")
       end
@@ -42,7 +45,7 @@ module Bon
 
     private def dispatch(argv : Array(String)) : Tuple(String, Array(String))
       first = argv.first?
-      if first == "print" || first == "simulate" || first == "init"
+      if first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config"
         {first.not_nil!, argv[1..]}
       else
         {"print", argv}
@@ -66,11 +69,6 @@ module Bon
         return 0
       end
 
-      if @list_printers
-        Cups.print_list(@output_io)
-        return 0
-      end
-
       if @files.empty?
         @error_io.puts(parser)
         @error_io.puts("error: FILE is required")
@@ -85,7 +83,6 @@ module Bon
     private def reset_print_state : Nil
       @files = [] of String
       @cli_options = Hash(String, String).new
-      @list_printers = false
       @no_crop = false
       @show_help = false
       @show_version = false
@@ -93,7 +90,18 @@ module Bon
 
     private def build_print_parser(config : Config) : OptionParser
       OptionParser.new do |parser|
-        parser.banner = "Usage: bon [print] [options] FILE..."
+        parser.banner = <<-TEXT
+          Usage: bon [print] [options] FILE...
+                 bon printer [list]
+                 bon config <check|show>
+
+          Commands:
+            print      Print one or more files. This is the default command.
+            printer    List discovered CUPS printer queues.
+            config     Validate or show the effective configuration.
+
+          Print options:
+          TEXT
 
         parser.on("-d NAME", "--printer=NAME", "CUPS printer queue") { |name| config.printer_name = name }
         parser.on("-n N", "--copies=N", "Number of copies") { |copies| config.cups_copies = copies.to_i }
@@ -106,13 +114,124 @@ module Bon
         parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = value.to_f64 }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
-        parser.on("--list-printers", "List discovered CUPS printer queues") { @list_printers = true }
         parser.on("--version", "Show version") { @show_version = true }
         parser.on("-h", "--help", "Show help") { @show_help = true }
         parser.unknown_args do |before_dash, after_dash|
           @files.concat(before_dash)
           @files.concat(after_dash)
         end
+      end
+    end
+
+    private def run_printer(argv : Array(String)) : Int32
+      show_help = false
+      subcommands = [] of String
+      parser = OptionParser.new do |parser|
+        parser.banner = <<-TEXT
+          Usage: bon printer [list]
+
+          Commands:
+            list       List discovered CUPS printer queues. This is the default printer command.
+
+          Printer options:
+          TEXT
+        parser.on("-h", "--help", "Show help") { show_help = true }
+        parser.unknown_args do |before_dash, after_dash|
+          subcommands.concat(before_dash)
+          subcommands.concat(after_dash)
+        end
+      end
+      parser.parse(argv)
+
+      if show_help
+        @output_io.puts(parser)
+        return 0
+      end
+
+      subcommand = subcommands.first?
+      if subcommand.nil? || subcommand == "list"
+        raise Error.new("Unexpected arguments for bon printer list: #{subcommands[1..].join(" ")}") if subcommands.size > 1
+        Cups.print_list(@output_io)
+        return 0
+      end
+
+      raise Error.new("Unknown printer command: #{subcommand}")
+    end
+
+    private def run_config(argv : Array(String)) : Int32
+      show_help = false
+      subcommands = [] of String
+      parser = OptionParser.new do |parser|
+        parser.banner = <<-TEXT
+          Usage: bon config <check|show>
+
+          Commands:
+            check      Validate config files and show which sources are used.
+            show       Show the effective merged config, including defaults.
+
+          Config options:
+          TEXT
+        parser.on("-h", "--help", "Show help") { show_help = true }
+        parser.unknown_args do |before_dash, after_dash|
+          subcommands.concat(before_dash)
+          subcommands.concat(after_dash)
+        end
+      end
+      parser.parse(argv)
+
+      if show_help
+        @output_io.puts(parser)
+        return 0
+      end
+
+      subcommand = subcommands.first?
+      unless subcommand
+        @error_io.puts(parser)
+        @error_io.puts("error: CONFIG COMMAND is required")
+        return 2
+      end
+      raise Error.new("Unexpected arguments for bon config #{subcommand}: #{subcommands[1..].join(" ")}") if subcommands.size > 1
+
+      case subcommand
+      when "check"
+        run_config_check
+      when "show"
+        run_config_show
+      else
+        raise Error.new("Unknown config command: #{subcommand}")
+      end
+    end
+
+    private def run_config_check : Int32
+      statuses = Config.source_statuses
+      statuses.each do |status|
+        Config.validate_file!(status.path) if status.used
+      end
+      Config.load_with_sources
+
+      @output_io.puts("Config OK")
+      print_config_sources(statuses)
+      0
+    end
+
+    private def run_config_show : Int32
+      loaded = Config.load_with_sources
+      @output_io.print(loaded.config.to_effective_toml)
+      0
+    end
+
+    private def print_config_sources(statuses : Array(ConfigSourceStatus)) : Nil
+      @output_io.puts("Sources:")
+      @output_io.puts("  defaults: built-in (used)")
+      statuses.each do |status|
+        state = if status.used
+                  "used"
+                elsif status.exists
+                  "ignored"
+                else
+                  "not found"
+                end
+        @output_io.puts("  #{status.label}: #{status.path} (#{state})")
       end
     end
 

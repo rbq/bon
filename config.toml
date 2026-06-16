@@ -1,6 +1,6 @@
 [printer]
-name = "EPSON_TM_m30III__USB_"
-candidates = ["EPSON_TM_m30III__USB_", "EPSON_TM_m30III"]
+name = ""
+candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"]
 
 [paper]
 width_mm = 80.0
