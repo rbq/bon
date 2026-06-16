@@ -365,6 +365,37 @@ describe Bon::Cli do
     end
   end
 
+  it "dry-runs multi-page PDFs with per-page media heights" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "variable-pages.pdf")
+      File.write(source, <<-PDF)
+        %PDF-1.7
+        1 0 obj <</MediaBox [0 0 100 120]>> endobj
+        2 0 obj <</MediaBox [0 0 100 240]>> endobj
+        PDF
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["--dry-run", source], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          output = stdout.to_s
+          output.should contain("-dFirstPage=1")
+          output.should contain("-dFirstPage=2")
+          output.should contain("-o media=Custom.100x120")
+          output.should contain("-o media=Custom.100x240")
+          output.should contain("001-variable-pages-print-page-001.pdf")
+          output.should contain("001-variable-pages-print-page-002.pdf")
+        end
+      end
+    end
+  end
+
   it "rejects unknown printer subcommands" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new

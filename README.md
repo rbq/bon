@@ -186,9 +186,10 @@ For each input, `bon`:
 5. Scans discoverable PDF `/CropBox` and `/MediaBox` entries on a best-effort basis, or computes image physical size from pixels and PPI. This is not a full PDF parser, so compressed/object-stream page boxes may not be visible.
 6. Fails if the document is wider than the physical paper width.
 7. Center-crops pages wider than printable width unless `--no-crop` is set. Default PDF/Typst/LaTeX cropping uses Ghostscript `pdfwrite` and keeps the print artifact as PDF; `render.typst_mode = "raster"` uses the raster/downsample path for Typst crops.
-8. Fails if the final document height exceeds `paper.max_media_height_pt`.
-9. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
-10. Runs `lp` with the configured queue, copies, options, and final document path.
+8. Splits multi-page PDFs into one temporary PDF per page so each page gets its own dynamic CUPS media height.
+9. Fails if any final page height exceeds `paper.max_media_height_pt`.
+10. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
+11. Runs `lp` with the configured queue, copies, options, and final page path.
 
 `bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags.
 

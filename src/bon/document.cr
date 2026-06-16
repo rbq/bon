@@ -9,10 +9,21 @@ module Bon
     SUPPORTED_SUFFIXES = [".pdf", ".png", ".jpg", ".jpeg", ".typ", ".tex"]
 
     struct Prepared
-      getter path : String
-      getter size : PDF::PageSize
+      getter pages : Array(PDF::PrintReady)
 
-      def initialize(@path : String, @size : PDF::PageSize)
+      def initialize(@pages : Array(PDF::PrintReady))
+      end
+
+      def initialize(path : String, size : PDF::PageSize)
+        @pages = [PDF::PrintReady.new(path, size)]
+      end
+
+      def path : String
+        @pages.first.path
+      end
+
+      def size : PDF::PageSize
+        @pages.first.size
       end
     end
 
@@ -30,16 +41,16 @@ module Bon
       end
 
       pdf = prepare_pdf(path, temp_dir, index, config, dry_run, output_io, error_io)
-      ready = PDF.prepare_for_print(
+      pages = PDF.prepare_pages_for_print(
         pdf,
-        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.pdf"),
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print"),
         config,
         no_crop,
         dry_run,
         output_io,
         error_io
       )
-      Prepared.new(ready.path, ready.size)
+      Prepared.new(pages)
     end
 
     def self.prepare_pdf(source : String, temp_dir : String, index : Int32, config : Config, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
@@ -73,16 +84,16 @@ module Bon
       ext = File.extname(path).downcase
       pdf = File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}.pdf")
       Image.wrap_as_typst_pdf(path, pdf, temp_dir, config, dry_run, output_io, error_io)
-      ready = PDF.prepare_for_print(
+      pages = PDF.prepare_pages_for_print(
         pdf,
-        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print.pdf"),
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{File.basename(path, ext)}-print"),
         config,
         false,
         dry_run,
         output_io,
         error_io
       )
-      Prepared.new(ready.path, ready.size)
+      Prepared.new(pages)
     end
 
     private def self.prepare_typst(path : String, temp_dir : String, index : Int32, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO, error_io : IO) : Prepared
@@ -94,16 +105,16 @@ module Bon
 
       return Prepared.new(pdf, PDF::PageSize.new(1, 1)) unless File.exists?(pdf)
 
-      ready = PDF.prepare_for_print(
+      pages = PDF.prepare_pages_for_print(
         pdf,
-        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}-print.pdf"),
+        File.join(temp_dir, "#{index.to_s.rjust(3, '0')}-#{basename}-print"),
         config,
         no_crop,
         dry_run,
         output_io,
         error_io
       )
-      Prepared.new(ready.path, ready.size)
+      Prepared.new(pages)
     end
 
     private def self.prepare_typst_raster(path : String, temp_dir : String, index : Int32, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO, error_io : IO) : Prepared

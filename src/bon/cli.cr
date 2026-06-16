@@ -422,10 +422,12 @@ module Bon
       with_temp_dir("bon-cups-") do |temp_dir|
         files.each_with_index(1) do |source, index|
           document = Document.prepare(source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
-          options = Cups.build_options(config, document.size, @cli_options)
-          Cups.validate_against!(printer, options, supported) if supported
-          command = Cups.lp_command(printer, config.cups_copies, options, document.path)
-          Command.run(command, "CUPS printing failed for #{source}", config.cups_dry_run, false, @output_io, @error_io)
+          document.pages.each do |page|
+            options = Cups.build_options(config, page.size, @cli_options)
+            Cups.validate_against!(printer, options, supported) if supported
+            command = Cups.lp_command(printer, config.cups_copies, options, page.path)
+            Command.run(command, "CUPS printing failed for #{source}", config.cups_dry_run, false, @output_io, @error_io)
+          end
         end
       end
     end

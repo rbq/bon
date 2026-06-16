@@ -90,6 +90,32 @@ module Bon
       PrintReady.new(output, target_size)
     end
 
+    def self.prepare_pages_for_print(path : String, output_prefix : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : Array(PrintReady)
+      sizes = page_sizes(path)
+      max_width = sizes.max_of(&.width)
+      if max_width > config.paper_width_pt + CROP_EPSILON_PT
+        raise Error.new("PDF width #{format_points(max_width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
+      end
+
+      if sizes.size == 1
+        return [prepare_for_print(path, "#{output_prefix}.pdf", config, no_crop, dry_run, output_io, error_io)]
+      end
+
+      crop = !no_crop && max_width > config.printable_width_pt + CROP_EPSILON_PT
+      sizes.map_with_index do |size, index|
+        page_number = index + 1
+        output = "#{output_prefix}-page-#{page_number.to_s.rjust(3, '0')}.pdf"
+        if crop
+          target_size = PageSize.new(config.printable_width_pt, size.height)
+          crop_page_to_width(path, output, config.printable_width_pt, page_number, size, dry_run, output_io, error_io)
+          PrintReady.new(output, target_size)
+        else
+          split_page(path, output, page_number, dry_run, output_io, error_io)
+          PrintReady.new(output, size)
+        end
+      end
+    end
+
     def self.crop_to_width(source : String, output : String, target_width : Float64, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
       size = print_size(source)
       left_crop = (size.width - target_width) / 2.0
@@ -110,6 +136,47 @@ module Bon
         "-f",
         source,
       ], "PDF media crop failed for #{source}", dry_run, true, output_io, error_io)
+      output
+    end
+
+    def self.split_page(source : String, output : String, page_number : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+      gs = Command.require_executable("gs")
+      Command.run([
+        gs,
+        "-q",
+        "-dNOPAUSE",
+        "-dBATCH",
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.7",
+        "-dFirstPage=#{page_number}",
+        "-dLastPage=#{page_number}",
+        "-sOutputFile=#{output}",
+        source,
+      ], "PDF page extraction failed for #{source} page #{page_number}", dry_run, false, output_io, error_io)
+      output
+    end
+
+    def self.crop_page_to_width(source : String, output : String, target_width : Float64, page_number : Int32, size : PageSize, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+      left_crop = (size.width - target_width) / 2.0
+      gs = Command.require_executable("gs")
+      Command.run([
+        gs,
+        "-q",
+        "-dNOPAUSE",
+        "-dBATCH",
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.7",
+        "-dFirstPage=#{page_number}",
+        "-dLastPage=#{page_number}",
+        "-dDEVICEWIDTHPOINTS=#{format_points(target_width)}",
+        "-dDEVICEHEIGHTPOINTS=#{format_points(size.height)}",
+        "-dFIXEDMEDIA",
+        "-sOutputFile=#{output}",
+        "-c",
+        "<</PageOffset [#{format_points(-left_crop)} 0]>> setpagedevice",
+        "-f",
+        source,
+      ], "PDF media crop failed for #{source} page #{page_number}", dry_run, false, output_io, error_io)
       output
     end
 
