@@ -4,7 +4,7 @@ candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"]
 
 [paper]
 width_mm = 80.0
-printable_width_pt = 204.3
+printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots
 min_media_pt = 72.0
 max_media_height_pt = 5669.3
 

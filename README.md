@@ -107,7 +107,7 @@ candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"]
 
 [paper]
 width_mm = 80.0
-printable_width_pt = 204.3
+printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots
 min_media_pt = 72.0
 max_media_height_pt = 5669.3
 
@@ -127,7 +127,7 @@ Resolution = "203x203dpi"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 
