@@ -19,7 +19,7 @@ Runtime tools:
 
 - CUPS commands: `lpstat` and `lp`
 - Ghostscript `gs` when center-cropping/rasterizing to printer dots is needed
-- Typst for `.typ` inputs and image inputs that need center-cropping
+- Typst for `.typ` inputs, JPEG simulation, and image inputs that need center-cropping
 - Optional LaTeX tools for `.tex` inputs: `latexmk`, `tectonic`, or `pdflatex`
 
 ## Usage
@@ -47,6 +47,14 @@ Validate and inspect configuration:
 ```sh
 mise run run -- config check
 mise run run -- config show
+mise run run -- config edit
+```
+
+Render a receipt mockup:
+
+```sh
+mise run run -- simulate receipt.typ image.png
+mise run run -- sim receipt.jpg
 ```
 
 Build the executable and run it directly:
@@ -60,17 +68,22 @@ bin/bon --dry-run ../Wetterbericht.typ
 
 ```text
 Usage: bon [print] [options] FILE...
+       bon simulate [options] [FILE...]
+       bon sim [options] [FILE...]
        bon printer [list]
-       bon config <check|show>
+       bon config <check|show|edit>
+       bon init [options]
 ```
 
 Commands:
 
 - `print [options] FILE...` - print one or more files. This is the default command, so `bon FILE...` also works.
+- `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
+- `sim [options] [FILE...]` - short alias for `simulate`.
 - `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
 - `config check` - validate used config files and show source status.
 - `config show` - show the effective merged config, including built-in defaults.
-- `simulate` - render a receipt mockup.
+- `config edit` - open the local or global config in `$VISUAL`, `$EDITOR`, or `vi`, then validate it.
 - `init` - write a default config file.
 
 Print options:
@@ -86,6 +99,20 @@ Print options:
 - `--help` - show usage help.
 
 If no files are passed to the print command, `bon` fails with usage help.
+
+Simulate options:
+
+- `-f, --format FORMAT` - output format, for example `png` or `pdf`.
+- `--paper-mm N` - simulated physical paper width in millimeters.
+- `--content-mm N` - override printed content width in millimeters.
+- `--ppi N` - content render PPI and image physical-size PPI.
+- `--mockup-ppi N` - final mockup image PPI.
+- `--top-mm N` - paper shown above the printed content.
+- `--bottom-mm N` - paper shown below the printed content.
+- `--out-dir DIR` - directory for generated outputs.
+- `--typst-bin PATH` - Typst executable to use.
+- `--no-crop` - do not center-crop content wider than printable width.
+- `--background-tint HEX` - paper background tint as `#RRGGBB` or `RRGGBB`.
 
 ## Configuration
 
@@ -113,9 +140,13 @@ max_media_height_pt = 5669.3
 
 [render]
 typst_bin = "typst"
+typst_mode = "pdf"
 image_ppi = 203
 raster_ppi_multiplier = 2
 latex_engine = "auto"
+
+[simulate]
+background_tint = "#f5f1e0"
 
 [cups]
 copies = 1
@@ -127,7 +158,7 @@ Resolution = "203x203dpi"
 TmxPaperReduction = "Off"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. CUPS options are merged by key. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `cups.paper_cut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string and manage `TmxPaperCut` directly in `[cups.options]`. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
 
 ## Print Pipeline
 
@@ -142,6 +173,8 @@ For each input, `bon`:
 7. Center-crops pages wider than printable width unless `--no-crop` is set. Cropped PDFs are rasterized at `render.image_ppi * render.raster_ppi_multiplier`, then downsampled to a 1-bit PNG at native `render.image_ppi`, with dimensions verified before printing.
 8. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
 9. Runs `lp` with the configured queue, copies, options, and final document path.
+
+`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`.
 
 ## Development
 
