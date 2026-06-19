@@ -2,7 +2,7 @@ name: bon
 version: 0.1.0
 
 authors:
-  - Bondrucker
+  - rbq
 
 targets:
   bon:
