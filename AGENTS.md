@@ -41,8 +41,9 @@ When modifying the application, keep all of the following in sync:
 - **AGENTS.md** — record new architecture decisions and significant implementation constraints in the Implementation Notes section so future agents have accurate context.
 - **Help output** — every command and subcommand must produce useful `--help` output. Check that the banner, subcommand list, and option descriptions in `cli.cr` match what is documented in `README.md`.
 - **Specs** — new features and behavior changes must be covered by specs. Prefer unit tests that exercise the changed module directly, and integration-level CLI specs for end-to-end command behavior. Run `mise run spec` and ensure all examples pass before finishing.
+- **Examples** — keep `examples/spec/` inputs and `examples/spec/README.md` aligned with supported code paths and project scope. Add, replace, or retire repository-local example fixtures when input formats, conversion paths, width/height policies, simulation behavior, or other representative workflows change.
 - **Config schema** — if a config key is added, renamed, or removed, update `Config#overlay`, `Config#validate!`, `Config#build_toml`, the `README.md` config example, and any related specs together.
-- **Document support matrix** — if a supported input type is added or dropped, update `Document::SUPPORTED_SUFFIXES`, `README.md` (Requirements, CLI, and Print Pipeline sections), and `AGENTS.md` Workflow Guidance.
+- **Document support matrix** — if a supported input type is added or dropped, update `Document::SUPPORTED_SUFFIXES`, `README.md` (Requirements, CLI, and Print Pipeline sections), `AGENTS.md` Workflow Guidance, related specs, and repository-local examples.
 
 ## Implementation Notes
 
