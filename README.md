@@ -93,7 +93,7 @@ Commands:
 - `config check` - validate used config files and show source status.
 - `config show` - show the effective merged config, including built-in defaults.
 - `config edit` - open the local or global config in `$VISUAL`, `$EDITOR`, or `vi`, then validate it.
-- `init` - write a default config file.
+- `init` - create or refresh a config file from printer discovery.
 
 Print options:
 
@@ -133,7 +133,8 @@ Config options:
 Init options:
 
 - `--global` - write the global config instead of local `./config.toml`.
-- `--force` - overwrite an existing config file.
+- `--force` - regenerate the config from the default template.
+- `--no-interactive` - avoid prompting and use deterministic printer selection.
 
 ## Configuration
 
@@ -144,14 +145,13 @@ Config is merged in this order:
 3. Local `./config.toml` from the current working directory.
 4. CLI flags.
 
-While this project still lives inside the Bondrucker workspace, `./bon/config.toml` is also supported as a transition fallback when no local `./config.toml` exists.
+While this project still lives inside the Bondrucker workspace, `./bon/config.toml` is also supported as a transition fallback when no local `./config.toml` exists. The repository ships `config.default.toml` as the user-facing template; machine-specific `config.toml` files should remain untracked.
 
 Example:
 
 ```toml
 [printer]
 name = ""
-candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"]
 
 [paper]
 width_mm = 80.0
@@ -181,9 +181,26 @@ dry_run = false
 Resolution = "203x203dpi"
 TmxPaperCut = "CutPerPage"
 TmxPaperReduction = "Off"
+
+[printer.EPSON_TM_m30III.paper]
+width_mm = 80.0
+
+[printer."Queue.Name".render]
+image_ppi = 180
+
+[printer.EPSON_TM_m30III.cups.options]
+TmxPaperCut = "CutPerPage"
 ```
 
-Local scalar keys override global scalar keys. Local `printer.candidates` replaces the global list. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. `render.typst_mode` is `pdf` by default, keeping Typst/LaTeX crop output as PDF; `raster` uses the Ghostscript raster/downsample path for Typst inputs that need cropping. `render.raster_ppi_multiplier` controls the high-resolution intermediate raster scale in raster mode and must be positive. `render.raster_threshold` controls the darkness cutoff for bon-generated 1-bit rasters from `0.0` to `1.0`; lower values print darker and the default `0.125` preserves the previous fixed threshold. `render.raster_dither` is `none` by default or `ordered` for 4x4 ordered dithering. These raster controls affect bon's own raster/downsample paths, not direct CUPS pass-through files or PDF-first `pdfwrite` crops. `render.latex_engine` must be `auto`, `latexmk`, `tectonic`, or `pdflatex`; `auto` tries those tools in that order where applicable. `simulate.background_tint` controls mockup paper color and accepts `#RRGGBB` or `RRGGBB`. `simulate.foreground_color` and `simulate.foreground_fade` control the mockup ink color and opacity while preserving the current look at their defaults. `TmxPaperCut = "CutPerPage"` asks supported thermal printers to cut after each page; change it to `CutPerJob` or `NoCut`, or set it to an empty string to omit that driver option. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config. During automatic discovery, non-USB queues are preferred because CUPS can keep disconnected USB queues enabled and idle; set `printer.name` or pass `--printer` to force a specific queue.
+Local scalar keys override global scalar keys. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config.
+
+`printer.candidates` is deprecated. Existing configs that contain it still load, but the key is ignored and CLI commands print a warning. Run `bon init` to remove it from `[printer]` while preserving unrelated config text.
+
+Printer-scoped overrides apply only after a print queue has been selected. Supported override blocks are `[printer.<queue>.paper]`, `[printer.<queue>.render]` for `image_ppi`, and `[printer.<queue>.cups.options]`. Quote queue names that contain dots or other TOML punctuation, for example `[printer."Queue.Name".paper]`. `config show` remains offline-safe and displays the merged config without resolving CUPS queues or applying printer-scoped overrides.
+
+`bon init` is safe to rerun. Without `--force`, it preserves comments, ordering, and unrelated settings, updates only `[printer] name`, and removes obsolete `[printer] candidates`. With `--force`, it regenerates from the default template. Non-interactive mode keeps an existing selected printer only if it is a usable thermal CUPS queue; otherwise it selects the first usable thermal queue, or leaves `printer.name` unset with a warning if none is found.
+
+`render.typst_mode` is `pdf` by default, keeping Typst/LaTeX crop output as PDF; `raster` uses the Ghostscript raster/downsample path for Typst inputs that need cropping. Raster controls affect bon-generated raster/downsample paths, not direct CUPS pass-through files or PDF-first `pdfwrite` crops. Simulation color and foreground settings live under `[simulate]`.
 
 ## Print Pipeline
 
