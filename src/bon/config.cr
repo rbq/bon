@@ -48,10 +48,37 @@ module Bon
     end
 
     private def self.split_key(key : String, source : String, number : Int32) : Array(String)
-      parts = key.split('.').map(&.strip)
-      if parts.empty? || parts.any?(&.empty?)
-        raise Error.new("Invalid TOML key in #{source}:#{number}")
+      parts = [] of String
+      token = String::Builder.new
+      in_string = false
+      escaped = false
+      key.each_char do |char|
+        if escaped
+          case char
+          when '"', '\\'
+            token << char
+          else
+            raise Error.new("Unsupported TOML escape \\#{char} in #{source}:#{number}")
+          end
+          escaped = false
+        elsif char == '\\' && in_string
+          escaped = true
+        elsif char == '"'
+          in_string = !in_string
+        elsif char == '.' && !in_string
+          part = token.to_s.strip
+          raise Error.new("Invalid TOML key in #{source}:#{number}") if part.empty?
+          parts << part
+          token = String::Builder.new
+        else
+          token << char
+        end
       end
+      raise Error.new("Invalid trailing TOML escape in #{source}:#{number}") if escaped
+      raise Error.new("Unterminated TOML key string in #{source}:#{number}") if in_string
+      part = token.to_s.strip
+      raise Error.new("Invalid TOML key in #{source}:#{number}") if part.empty?
+      parts << part
       parts
     end
 
@@ -156,14 +183,51 @@ module Bon
   struct LoadedConfig
     getter config : Config
     getter sources : Array(ConfigSource)
+    getter warnings : Array(String)
 
-    def initialize(@config : Config, @sources : Array(ConfigSource))
+    def initialize(@config : Config, @sources : Array(ConfigSource), @warnings : Array(String))
+    end
+  end
+
+  module DefaultConfig
+    def self.template(selected_printer : String? = nil) : String
+      Config.new(printer_name: selected_printer).to_toml
+    end
+
+    def self.toml_escape(value : String) : String
+      value.gsub("\\", "\\\\").gsub("\"", "\\\"")
+    end
+
+    def self.table_key_part(value : String) : String
+      if value.match(/\A[A-Za-z0-9_-]+\z/)
+        value
+      else
+        %("#{toml_escape(value)}")
+      end
+    end
+  end
+
+  class PrinterOverrides
+    property paper_width_mm : Float64?
+    property printable_width_pt : Float64?
+    property min_media_pt : Float64?
+    property max_media_height_pt : Float64?
+    property image_ppi : Int32?
+    getter cups_options : Hash(String, String)
+
+    def initialize
+      @cups_options = Hash(String, String).new
+    end
+
+    def empty? : Bool
+      @paper_width_mm.nil? && @printable_width_pt.nil? && @min_media_pt.nil? && @max_media_height_pt.nil? && @image_ppi.nil? && @cups_options.empty?
     end
   end
 
   class Config
     property printer_name : String?
-    property printer_candidates : Array(String)
+    getter warnings : Array(String)
+    getter printer_overrides : Hash(String, PrinterOverrides)
     property paper_width_mm : Float64
     @printable_width_pt : Float64?
     property min_media_pt : Float64
@@ -183,7 +247,6 @@ module Bon
     property simulate_foreground_fade : Float64
 
     def initialize(@printer_name : String? = nil,
-                   @printer_candidates = ["EPSON_TM_m30III", "EPSON_TM_m30III__USB_"],
                    @paper_width_mm = 80.0,
                    printable_width_pt : Float64? = nil,
                    @min_media_pt = 72.0,
@@ -204,8 +267,10 @@ module Bon
                    },
                    @simulate_background_tint = "#f5f1e0",
                    @simulate_foreground_color = "#232320",
-                   @simulate_foreground_fade = 1.0)
+                    @simulate_foreground_fade = 1.0)
       @printable_width_pt = printable_width_pt
+      @warnings = [] of String
+      @printer_overrides = Hash(String, PrinterOverrides).new
     end
 
     def printable_width_pt : Float64
@@ -251,7 +316,7 @@ module Bon
         config.overlay_file(source.path)
       end
       config.validate!
-      LoadedConfig.new(config, sources)
+      LoadedConfig.new(config, sources, config.warnings.dup)
     end
 
     def self.source_statuses(cwd = Dir.current) : Array(ConfigSourceStatus)
@@ -289,8 +354,8 @@ module Bon
       end
     end
 
-    def self.default_toml : String
-      new.to_toml
+    def self.default_toml(selected_printer : String? = nil) : String
+      DefaultConfig.template(selected_printer)
     end
 
     def to_toml : String
@@ -303,24 +368,23 @@ module Bon
 
     private def build_toml(comment_nil_name : Bool) : String
       String.build do |io|
+        io << "# Generated bon configuration. Re-run `bon init` to refresh printer selection.\n\n"
         io << "[printer]\n"
         if name = @printer_name
           io << "name = \"#{toml_escape(name)}\"\n"
         elsif comment_nil_name
-          io << "# name = \"EPSON_TM_m30III\"\n"
+          io << "# name = \"EPSON_TM_m30III\" # optional; omit or leave commented for auto-discovery\n"
         else
           io << "name = \"\"\n"
         end
-        io << "candidates = ["
-        io << @printer_candidates.map { |candidate| "\"#{toml_escape(candidate)}\"" }.join(", ")
-        io << "]\n\n"
+        io << "\n"
 
         io << "[paper]\n"
         io << "width_mm = #{@paper_width_mm}\n"
         if printable_width = @printable_width_pt
           io << "printable_width_pt = #{printable_width}\n"
         elsif comment_nil_name
-          io << "printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots\n"
+          io << "# printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots\n"
         else
           io << "printable_width_pt = #{printable_width_pt}\n"
         end
@@ -349,6 +413,11 @@ module Bon
         @cups_options.keys.sort.each do |key|
           io << "#{key} = \"#{toml_escape(@cups_options[key])}\"\n"
         end
+        io << "\n# Optional printer-scoped hardware overrides. Quote queue names containing dots.\n"
+        io << "# [printer.EPSON_TM_m30III.paper]\n"
+        io << "# width_mm = 80.0\n"
+        io << "# [printer.#{DefaultConfig.table_key_part("EPSON_TM_m30III")}.cups.options]\n"
+        io << "# TmxPaperCut = \"CutPerPage\"\n"
       end
     end
 
@@ -363,7 +432,8 @@ module Bon
           name = expect_string(key, value, source)
           @printer_name = name.empty? ? nil : name
         when "printer.candidates"
-          @printer_candidates = expect_string_array(key, value, source)
+          expect_string_array(key, value, source)
+          @warnings << "#{source}: printer.candidates is deprecated and ignored; run `bon init` to migrate"
         when "paper.width_mm"
           @paper_width_mm = expect_number(key, value, source)
         when "paper.printable_width_pt"
@@ -400,6 +470,8 @@ module Bon
         else
           if key.starts_with?("cups.options.")
             set_cups_option(key[13..], scalar_to_string(key, value, source))
+          elsif key.starts_with?("printer.")
+            overlay_printer_override(key, value, source)
           else
             raise Error.new("Unknown config key #{key} in #{source}")
           end
@@ -438,6 +510,66 @@ module Bon
 
     def paper_width_pt : Float64
       @paper_width_mm * 72.0 / 25.4
+    end
+
+    def apply_printer_overrides!(name : String) : Nil
+      overrides = @printer_overrides[name]?
+      return unless overrides
+      @paper_width_mm = overrides.paper_width_mm.not_nil! if overrides.paper_width_mm
+      if printable_width = overrides.printable_width_pt
+        @printable_width_pt = printable_width <= 0 ? nil : printable_width
+      end
+      @min_media_pt = overrides.min_media_pt.not_nil! if overrides.min_media_pt
+      @max_media_height_pt = overrides.max_media_height_pt.not_nil! if overrides.max_media_height_pt
+      @image_ppi = overrides.image_ppi.not_nil! if overrides.image_ppi
+      overrides.cups_options.each { |key, value| set_cups_option(key, value) }
+    end
+
+    private def overlay_printer_override(key : String, value : TomlScalar, source : String) : Nil
+      parts = key.split('.')
+      raise Error.new("Unknown config key #{key} in #{source}") if parts.size < 4
+      match = nil.as(Tuple(String, String)?)
+      queue_end = 0
+      if parts.size >= 5 && parts[-3] == "cups" && parts[-2] == "options"
+        match = {"cups", "options"}
+        queue_end = parts.size - 4
+      else
+        suffixes = [
+          {"paper", "width_mm"},
+          {"paper", "printable_width_pt"},
+          {"paper", "min_media_pt"},
+          {"paper", "max_media_height_pt"},
+          {"render", "image_ppi"},
+        ]
+        match = suffixes.find do |suffix|
+          parts.size >= 3 + suffix.size && parts[-suffix.size, suffix.size] == suffix.to_a
+        end
+        raise Error.new("Unknown printer override key #{key} in #{source}") unless match
+        queue_end = parts.size - match.size - 1
+      end
+      match = match.not_nil!
+      raise Error.new("Unknown printer override key #{key} in #{source}") if queue_end < 1
+      queue = parts[1..queue_end].join(".")
+      section = match[0]
+      setting = match[1]
+      overrides = (@printer_overrides[queue] ||= PrinterOverrides.new)
+      case "#{section}.#{setting}"
+      when "paper.width_mm"
+        overrides.paper_width_mm = expect_number(key, value, source)
+      when "paper.printable_width_pt"
+        overrides.printable_width_pt = expect_number(key, value, source)
+      when "paper.min_media_pt"
+        overrides.min_media_pt = expect_number(key, value, source)
+      when "paper.max_media_height_pt"
+        overrides.max_media_height_pt = expect_number(key, value, source)
+      when "render.image_ppi"
+        overrides.image_ppi = expect_int(key, value, source)
+      when "cups.options"
+        option = parts.last
+        overrides.cups_options[option] = scalar_to_string(key, value, source)
+      else
+        raise Error.new("Unknown printer override key #{key} in #{source}")
+      end
     end
 
     private def expect_string(key : String, value : TomlScalar, source : String) : String

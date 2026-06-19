@@ -27,14 +27,26 @@ describe Bon::Cups do
     Bon::Cups.discover(Bon::Config.new, queues).name.should eq("EPSON_TM_m30III")
   end
 
-  it "uses candidate order between queues with the same connection type" do
-    config = Bon::Config.new(printer_candidates: ["Preferred", "Fallback"])
+  it "ignores deprecated candidate-like queue names and uses stable thermal order" do
+    config = Bon::Config.new
     queues = [
       Bon::Cups::Queue.new("Fallback", "ipp://fallback/printer", true, "is idle.  enabled since today"),
       Bon::Cups::Queue.new("Preferred", "ipp://preferred/printer", true, "is idle.  enabled since today"),
     ]
 
-    Bon::Cups.discover(config, queues).name.should eq("Preferred")
+    expect_raises(Bon::Error, /No usable thermal/) do
+      Bon::Cups.discover(config, queues)
+    end
+  end
+
+  it "validates init printers only when usable and thermal" do
+    queues = [
+      Bon::Cups::Queue.new("Office", "ipp://office/printer", true, "is idle.  enabled since today"),
+      Bon::Cups::Queue.new("Receipt", "ipp://receipt/printer", true, "is idle.  enabled since today"),
+    ]
+
+    Bon::Cups.valid_init_printer?("Office", queues).should be_false
+    Bon::Cups.valid_init_printer?("Receipt", queues).should be_true
   end
 
   it "keeps an explicit printer name authoritative" do

@@ -3,7 +3,7 @@ require "../src/bon/config"
 require "../src/bon/pdf"
 
 describe Bon::Toml do
-  it "parses the supported scalar and array subset" do
+  it "parses the supported scalar, array, and quoted dotted key subset" do
     values = Bon::Toml.parse(<<-TOML)
       [printer]
       name = "EPSON_TM_m30III__USB_"
@@ -18,6 +18,9 @@ describe Bon::Toml do
 
       [cups.options]
       TmxPaperCut = "NoCut"
+
+      [printer."Queue.Name".paper]
+      width_mm = 58.0
     TOML
 
     values["printer.name"].should eq("EPSON_TM_m30III__USB_")
@@ -26,16 +29,14 @@ describe Bon::Toml do
     values["cups.dry_run"].should eq(true)
     values["paper.width_mm"].should eq(80.0)
     values["cups.options.TmxPaperCut"].should eq("NoCut")
+    values["printer.Queue.Name.paper.width_mm"].should eq(58.0)
   end
 end
 
 describe Bon::Config do
-  it "overlays local scalar values, replaces candidates, and merges CUPS options" do
+  it "overlays local scalar values and merges CUPS options" do
     config = Bon::Config.new
     config.overlay(Bon::Toml.parse(<<-TOML))
-      [printer]
-      candidates = ["LOCAL"]
-
       [paper]
       printable_width_pt = 149.1
 
@@ -55,7 +56,6 @@ describe Bon::Config do
       SomeFlag = true
     TOML
 
-    config.printer_candidates.should eq(["LOCAL"])
     config.printable_width_pt.should eq(149.1)
     config.typst_mode.should eq("raster")
     config.raster_ppi_multiplier.should eq(3)
@@ -66,6 +66,17 @@ describe Bon::Config do
     config.simulate_foreground_fade.should eq(0.5)
     config.cups_options["Resolution"].should eq("180x180dpi")
     config.cups_options["SomeFlag"].should eq("true")
+  end
+
+  it "warns and ignores deprecated printer candidates" do
+    config = Bon::Config.new
+
+    config.overlay(Bon::Toml.parse(<<-TOML), "local config")
+      [printer]
+      candidates = ["LOCAL"]
+    TOML
+
+    config.warnings.should eq(["local config: printer.candidates is deprecated and ignored; run `bon init` to migrate"])
   end
 
   it "includes raster controls in generated TOML defaults" do
@@ -126,11 +137,33 @@ describe Bon::Config do
     defaults.should_not contain("paper_cut")
   end
 
-  it "does not force the USB printer in generated TOML defaults" do
+  it "does not include active printer candidates in generated TOML defaults" do
     defaults = Bon::Config.default_toml
 
     defaults.should contain("# name = \"EPSON_TM_m30III\"")
-    defaults.should contain("candidates = [\"EPSON_TM_m30III\", \"EPSON_TM_m30III__USB_\"]")
+    defaults.should_not contain("candidates =")
+  end
+
+  it "applies selected printer overrides only when requested" do
+    config = Bon::Config.new
+    config.overlay(Bon::Toml.parse(<<-TOML))
+      [printer."Queue.Name".paper]
+      width_mm = 58.0
+      printable_width_pt = 0.0
+
+      [printer."Queue.Name".render]
+      image_ppi = 180
+
+      [printer."Queue.Name".cups.options]
+      TmxPaperCut = "NoCut"
+    TOML
+
+    config.paper_width_mm.should eq(80.0)
+    config.apply_printer_overrides!("Queue.Name")
+    config.paper_width_mm.should eq(58.0)
+    Bon::PDF.format_points(config.printable_width_pt).should eq("136.197")
+    config.image_ppi.should eq(180)
+    config.cups_options["TmxPaperCut"].should eq("NoCut")
   end
 
   it "allows an empty printer name to restore automatic discovery" do

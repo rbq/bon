@@ -66,7 +66,9 @@ module Bon
         return 0
       end
 
-      config = Config.load
+      loaded = Config.load_with_sources
+      emit_config_warnings(loaded)
+      config = loaded.config
       parser = build_print_parser(config)
       parser.parse(argv)
       config.validate!
@@ -89,6 +91,8 @@ module Bon
       validate_stdin_sources(@files)
 
       queue = Cups.discover(config)
+      config.apply_printer_overrides!(queue.name)
+      config.validate!
       print_documents(@files, queue.name, config)
       0
     end
@@ -118,7 +122,7 @@ module Bon
             sim        Alias for simulate.
             printer    List discovered CUPS printer queues.
             config     Validate, show, or edit configuration.
-            init       Write a default config file.
+            init       Create or refresh a config file from printer discovery.
 
           Print options:
           TEXT
@@ -234,7 +238,8 @@ module Bon
 
     private def run_config_check : Int32
       statuses = Config.source_statuses
-      Config.load_with_sources
+      loaded = Config.load_with_sources
+      emit_config_warnings(loaded)
 
       @output_io.puts("Config OK")
       print_config_sources(statuses)
@@ -243,6 +248,7 @@ module Bon
 
     private def run_config_show : Int32
       loaded = Config.load_with_sources
+      emit_config_warnings(loaded)
       @output_io.print(loaded.config.to_effective_toml)
       0
     end
@@ -264,8 +270,10 @@ module Bon
         config = Config.new
         config.overlay_file(path)
         config.validate!
+        emit_config_warnings(config)
       else
-        Config.load_with_sources
+        loaded = Config.load_with_sources
+        emit_config_warnings(loaded)
       end
       @output_io.puts("Config OK: #{path}")
       0
@@ -313,7 +321,9 @@ module Bon
         return 0
       end
 
-      config = Config.load
+      loaded = Config.load_with_sources
+      emit_config_warnings(loaded)
+      config = loaded.config
       options = Simulate::Options.new(
         paper_mm: config.paper_width_mm,
         printable_width_mm: config.printable_width_pt * 25.4 / 72.0,
@@ -389,11 +399,13 @@ module Bon
     private def run_init(argv : Array(String)) : Int32
       use_global = false
       force = false
+      no_interactive = false
       show_help = false
       parser = OptionParser.new do |parser|
         parser.banner = "Usage: bon init [options]"
         parser.on("--global", "Write the global bon config") { use_global = true }
-        parser.on("--force", "Overwrite an existing config") { force = true }
+        parser.on("--force", "Regenerate config from the default template") { force = true }
+        parser.on("--no-interactive", "Do not prompt for printer selection") { no_interactive = true }
         parser.on("-h", "--help", "Show help") { show_help = true }
       end
       parser.parse(argv)
@@ -408,13 +420,121 @@ module Bon
              else
                File.join(Dir.current, "config.toml")
              end
-      raise Error.new("Config already exists: #{path}; pass --force to overwrite") if File.exists?(path) && !force
+      existing = File.exists?(path) ? File.read(path) : nil
+      configured = existing ? configured_printer_from_text(existing, path) : nil
+      queues = begin
+        Cups.queues
+      rescue ex : Error
+        @error_io.puts("warning: could not discover CUPS printers: #{ex.message}")
+        [] of Cups::Queue
+      end
+      selected = select_init_printer(configured, queues, interactive: !no_interactive && interactive_io?)
+      @error_io.puts("warning: no usable thermal CUPS printer found; leaving printer.name unset") unless selected
 
       parent = File.dirname(path)
       FileUtils.mkdir_p(parent) unless Dir.exists?(parent)
-      File.write(path, Config.default_toml)
+      if force || existing.nil?
+        File.write(path, Config.default_toml(selected))
+      else
+        File.write(path, update_init_config_text(existing, selected))
+      end
+      config = Config.new
+      config.overlay_file(path)
+      config.validate!
+      emit_config_warnings(config)
       @output_io.puts(path)
       0
+    end
+
+    private def emit_config_warnings(loaded : LoadedConfig) : Nil
+      loaded.warnings.each { |warning| @error_io.puts("warning: #{warning}") }
+    end
+
+    private def emit_config_warnings(config : Config) : Nil
+      config.warnings.each { |warning| @error_io.puts("warning: #{warning}") }
+    end
+
+    private def configured_printer_from_text(text : String, path : String) : String?
+      config = Config.new
+      config.overlay(Bon::Toml.parse(text, path), path)
+      config.printer_name
+    end
+
+    private def select_init_printer(configured : String?, queues : Array(Cups::Queue), interactive : Bool) : String?
+      thermal = Cups.usable_thermal_queues(queues)
+      default = if configured && Cups.valid_init_printer?(configured, queues)
+                  configured
+                else
+                  thermal.first?.try(&.name)
+                end
+      return default unless interactive && !thermal.empty?
+
+      @output_io.puts("Usable thermal printers:")
+      thermal.each_with_index(1) do |queue, index|
+        marker = queue.name == default ? " (default)" : ""
+        @output_io.puts("  #{index}. #{queue.name}#{marker}")
+      end
+      @output_io.puts("  0. Do not pin a printer")
+      loop do
+        @output_io.print("Select printer [#{default || "0"}]: ")
+        answer = @input_io.gets
+        raise Error.new("No printer selection received") unless answer
+        stripped = answer.strip
+        return default if stripped.empty?
+        return nil if stripped == "0"
+        if index = stripped.to_i?
+          queue = thermal[index - 1]?
+          return queue.name if queue
+        end
+        @error_io.puts("error: enter a number from 0 to #{thermal.size}")
+      end
+    end
+
+    private def interactive_io? : Bool
+      @input_io == STDIN && @output_io == STDOUT
+    end
+
+    private def update_init_config_text(text : String, selected : String?) : String
+      lines = text.lines
+      output = [] of String
+      in_printer = false
+      saw_printer = false
+      wrote_name = false
+      lines.each do |line|
+        stripped = line.strip
+        if stripped.starts_with?("[") && stripped.ends_with?("]")
+          if in_printer && !wrote_name && selected
+            output << %(name = "#{DefaultConfig.toml_escape(selected)}"\n)
+            wrote_name = true
+          end
+          in_printer = stripped == "[printer]"
+          saw_printer = true if in_printer
+          output << line
+          next
+        end
+
+        if in_printer
+          key = stripped.partition("=")[0].strip
+          if key == "name"
+            unless wrote_name
+              output << (selected ? %(name = "#{DefaultConfig.toml_escape(selected)}"\n) : %(# name = ""\n))
+              wrote_name = true
+            end
+            next
+          elsif key == "candidates"
+            next
+          end
+        end
+        output << line
+      end
+      if in_printer && !wrote_name && selected
+        output << %(name = "#{DefaultConfig.toml_escape(selected)}"\n)
+      elsif !saw_printer
+        output << "\n" unless output.empty? || output.last.ends_with?("\n")
+        output << "[printer]\n"
+        output << (selected ? %(name = "#{DefaultConfig.toml_escape(selected)}"\n) : %(# name = ""\n))
+      end
+      output.join
     end
 
     private def print_documents(files : Array(String), printer : String, config : Config) : Nil

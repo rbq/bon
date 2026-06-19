@@ -24,7 +24,7 @@ describe Bon::Cli do
     help.should contain("sim        Alias for simulate")
     help.should contain("printer    List discovered CUPS printer queues")
     help.should contain("config     Validate, show, or edit configuration")
-    help.should contain("init       Write a default config file")
+    help.should contain("init       Create or refresh a config file")
     help.should contain("--raster-threshold=N")
     help.should contain("--raster-dither=MODE")
     help.should contain("--stdin-as=TYPE")
@@ -241,7 +241,7 @@ describe Bon::Cli do
           output = stdout.to_s
           output.should contain("[printer]")
           output.should contain("name = \"\"")
-          output.should contain("candidates = [\"EPSON_TM_m30III\", \"EPSON_TM_m30III__USB_\"]")
+          output.should_not contain("candidates =")
           output.should contain("width_mm = 58.0")
           output.should contain("printable_width_pt = 136.197")
           output.should contain("[simulate]")
