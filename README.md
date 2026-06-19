@@ -44,6 +44,13 @@ Print one or more files:
 mise run run -- examples/spec/variable-pages.pdf examples/spec/receipt.png examples/spec/receipt-80mm.typ examples/spec/receipt.tex
 ```
 
+Print one document from stdin. Binary PDF, PNG, and JPEG input is auto-detected; Typst and LaTeX stdin must be typed explicitly:
+
+```sh
+cat examples/spec/variable-pages.pdf | mise run run -- --dry-run -
+cat examples/spec/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+```
+
 Validate and inspect configuration:
 
 ```sh
@@ -69,7 +76,7 @@ bin/bon --dry-run examples/spec/receipt-80mm.typ
 ## CLI
 
 ```text
-Usage: bon [print] [options] FILE...
+Usage: bon [print] [options] FILE...|-
        bon simulate [options] [FILE...]
        bon sim [options] [FILE...]
        bon printer [list]
@@ -79,7 +86,7 @@ Usage: bon [print] [options] FILE...
 
 Commands:
 
-- `print [options] FILE...` - print one or more files. This is the default command, so `bon FILE...` also works.
+- `print [options] FILE...|-` - print one or more files, or one supported document from stdin with `-`. This is the default command, so `bon FILE...` also works.
 - `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
 - `sim [options] [FILE...]` - short alias for `simulate`.
 - `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
@@ -95,12 +102,13 @@ Print options:
 - `-o, --option KEY=VALUE` - add or override a CUPS option; repeatable.
 - `--paper-mm N` - physical paper width in millimeters.
 - `--printable-width-pt N` - printable width in points.
+- `--stdin-as TYPE` - type for stdin input: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
 - `--no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
 - `--version` - show the CLI version.
 - `--help` - show usage help.
 
-If no files are passed to the print command, `bon` fails with usage help.
+If no files are passed to the print command, `bon` fails with usage help. Use `-` to read a single print input from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. Piped Typst files are materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained.
 
 Simulate options:
 
@@ -181,8 +189,8 @@ Local scalar keys override global scalar keys. Local `printer.candidates` replac
 
 For each input, `bon`:
 
-1. Resolves and validates the path.
-2. Creates a temporary working directory outside the project tree.
+1. Creates a temporary working directory outside the project tree.
+2. Resolves and validates path inputs, or materializes stdin `-` into a typed temporary file before validation.
 3. Converts Typst and LaTeX inputs to PDF.
 4. Sends PNG/JPEG inputs directly to CUPS when they fit the printable width, based on `render.image_ppi`.
 5. Scans discoverable PDF `/CropBox` and `/MediaBox` entries on a best-effort basis, or computes image physical size from pixels and PPI. This is not a full PDF parser, so compressed/object-stream page boxes may not be visible.

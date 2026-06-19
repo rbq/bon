@@ -10,13 +10,14 @@ module Bon
   class Cli
     VERSION = "0.1.0"
 
-    def self.run(argv = ARGV, output_io : IO = STDOUT, error_io : IO = STDERR) : Int32
-      new(argv, output_io, error_io).run
+    def self.run(argv = ARGV, output_io : IO = STDOUT, error_io : IO = STDERR, input_io : IO = STDIN) : Int32
+      new(argv, output_io, error_io, input_io).run
     end
 
-    def initialize(@argv : Array(String), @output_io : IO = STDOUT, @error_io : IO = STDERR)
+    def initialize(@argv : Array(String), @output_io : IO = STDOUT, @error_io : IO = STDERR, @input_io : IO = STDIN)
       @files = [] of String
       @cli_options = Hash(String, String).new
+      @stdin_as = nil.as(String?)
       @no_crop = false
       @show_help = false
       @show_version = false
@@ -85,6 +86,7 @@ module Bon
         @error_io.puts("error: FILE is required")
         return 2
       end
+      validate_stdin_sources(@files)
 
       queue = Cups.discover(config)
       print_documents(@files, queue.name, config)
@@ -94,6 +96,7 @@ module Bon
     private def reset_print_state : Nil
       @files = [] of String
       @cli_options = Hash(String, String).new
+      @stdin_as = nil.as(String?)
       @no_crop = false
       @show_help = false
       @show_version = false
@@ -102,7 +105,7 @@ module Bon
     private def build_print_parser(config : Config) : OptionParser
       OptionParser.new do |parser|
         parser.banner = <<-TEXT
-          Usage: bon [print] [options] FILE...
+          Usage: bon [print] [options] FILE...|-
                  bon simulate [options] [FILE...]
                  bon sim [options] [FILE...]
                  bon printer [list]
@@ -131,6 +134,7 @@ module Bon
         parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = parse_float(value, "--printable-width-pt") }
         parser.on("--raster-threshold=N", "Raster darkness cutoff from 0.0 to 1.0") { |value| config.raster_threshold = parse_float(value, "--raster-threshold") }
         parser.on("--raster-dither=MODE", "Raster dithering: none or ordered") { |value| config.raster_dither = value }
+        parser.on("--stdin-as=TYPE", "Type for stdin input: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
         parser.on("--version", "Show version") { @show_version = true }
@@ -253,7 +257,7 @@ module Bon
       ensure_config_file(path)
       editor = default_editor
       command = "#{editor} #{Command.shell_escape(path)}"
-      status = Process.run(command, shell: true, input: STDIN, output: @output_io, error: @error_io)
+      status = Process.run(command, shell: true, input: @input_io, output: @output_io, error: @error_io)
       raise Error.new("Editor failed: #{editor}") unless status.success?
 
       if use_global
@@ -423,7 +427,8 @@ module Bon
 
       with_temp_dir("bon-cups-") do |temp_dir|
         files.each_with_index(1) do |source, index|
-          document = Document.prepare(source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
+          resolved_source = materialize_stdin_source(source, temp_dir, index)
+          document = Document.prepare(resolved_source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
           document.pages.each do |page|
             options = Cups.build_options(config, page.size, @cli_options)
             Cups.validate_against!(printer, options, supported) if supported
@@ -432,6 +437,47 @@ module Bon
           end
         end
       end
+    end
+
+    private def validate_stdin_sources(files : Array(String)) : Nil
+      stdin_count = files.count { |file| file == "-" }
+      raise Error.new("stdin input can only be used once") if stdin_count > 1
+    end
+
+    private def materialize_stdin_source(source : String, temp_dir : String, index : Int32) : String
+      return source unless source == "-"
+
+      content = @input_io.gets_to_end
+      raise Error.new("stdin input is empty") if content.empty?
+
+      ext = @stdin_as || detect_stdin_type(content.to_slice)
+      unless ext
+        raise Error.new("Could not detect stdin input type; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex")
+      end
+
+      path = File.join(temp_dir, "stdin#{ext}")
+      File.write(path, content)
+      path
+    end
+
+    private def detect_stdin_type(bytes : Bytes) : String?
+      return ".pdf" if starts_with?(bytes, Bytes[0x25, 0x50, 0x44, 0x46, 0x2d])
+      return ".png" if starts_with?(bytes, Bytes[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      return ".jpg" if starts_with?(bytes, Bytes[0xff, 0xd8])
+
+      nil
+    end
+
+    private def starts_with?(bytes : Bytes, prefix : Bytes) : Bool
+      bytes.size >= prefix.size && bytes[0, prefix.size] == prefix
+    end
+
+    private def normalize_stdin_type(value : String) : String
+      normalized = value.downcase.sub(/^\./, "")
+      ext = ".#{normalized}"
+      return ext if Document::SUPPORTED_SUFFIXES.includes?(ext)
+
+      raise Error.new("--stdin-as must be one of: pdf, png, jpg, jpeg, typ, tex")
     end
 
     private def with_temp_dir(prefix : String, & : String ->) : Nil

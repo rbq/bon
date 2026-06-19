@@ -27,6 +27,7 @@ describe Bon::Cli do
     help.should contain("init       Write a default config file")
     help.should contain("--raster-threshold=N")
     help.should contain("--raster-dither=MODE")
+    help.should contain("--stdin-as=TYPE")
   end
 
   it "documents the simulate alias in simulate help" do
@@ -398,6 +399,155 @@ describe Bon::Cli do
     end
   end
 
+  it "dry-runs PDF stdin with binary auto-detection" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 120]>> endobj\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "-"], stdout, stderr, stdin)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("lp -d EPSON_TM_m30III -n 1")
+        output.should contain("-o media=Custom.100x120")
+        output.should contain("stdin.pdf")
+      end
+    end
+  end
+
+  it "dry-runs Typst stdin when explicitly typed" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("#set page(width: 80mm, height: 300pt)\nHello\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "--stdin-as", "typ", "-"], stdout, stderr, stdin)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("typst compile --root")
+        output.should contain("001-stdin.pdf")
+        output.should contain("001-stdin-print.pdf")
+      end
+    end
+  end
+
+  it "dry-runs LaTeX stdin when explicitly typed" do
+    with_cli_temp_dir do |dir|
+      File.write(File.join(dir, "config.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("\\documentclass{article}\\begin{document}Hello\\end{document}\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["--dry-run", "--stdin-as=tex", "-"], stdout, stderr, stdin)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          output = stdout.to_s
+          output.should contain("pdflatex -interaction=nonstopmode")
+          output.should contain("001-stdin.pdf")
+          output.should contain("001-stdin-print.pdf")
+        end
+      end
+    end
+  end
+
+  it "dry-runs PNG stdin with binary auto-detection" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new(png_header_bytes(100, 50))
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "-"], stdout, stderr, stdin)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("lp -d EPSON_TM_m30III -n 1")
+        output.should contain("-o media=Custom.72x72")
+        output.should contain("stdin.png")
+        output.should_not contain("typst compile")
+        output.should_not contain("gs -q")
+      end
+    end
+  end
+
+  it "rejects undetectable text stdin without --stdin-as" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("#set page(width: 80mm)\nHello\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "-"], stdout, stderr, stdin)
+
+        status.should eq(2)
+        stdout.to_s.should eq("")
+        stderr.to_s.should contain("error: Could not detect stdin input type; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex")
+      end
+    end
+  end
+
+  it "rejects invalid --stdin-as before printer discovery" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+    stdin = IO::Memory.new("%PDF-1.7\n")
+
+    status = Bon::Cli.run(["--dry-run", "--stdin-as", "gif", "-"], stdout, stderr, stdin)
+
+    status.should eq(2)
+    stdout.to_s.should eq("")
+    stderr.to_s.should contain("error: --stdin-as must be one of: pdf, png, jpg, jpeg, typ, tex")
+  end
+
+  it "rejects multiple stdin sources before reading stdin" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+    stdin = IO::Memory.new("%PDF-1.7\n")
+
+    status = Bon::Cli.run(["--dry-run", "-", "-"], stdout, stderr, stdin)
+
+    status.should eq(2)
+    stdout.to_s.should eq("")
+    stderr.to_s.should contain("error: stdin input can only be used once")
+  end
+
+  it "rejects empty stdin" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "--stdin-as", "pdf", "-"], stdout, stderr, stdin)
+
+        status.should eq(2)
+        stdout.to_s.should eq("")
+        stderr.to_s.should contain("error: stdin input is empty")
+      end
+    end
+  end
+
   it "rejects unknown printer subcommands" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new
@@ -508,6 +658,24 @@ private def install_fake_editor(dir : String, body : String) : Nil
     #{body}
     SH
   File.chmod(path, 0o755)
+end
+
+private def png_header_bytes(width : Int32, height : Int32) : Bytes
+  png = IO::Memory.new
+  png.write(Bytes[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  png.write(Bytes[0x00, 0x00, 0x00, 0x0d])
+  png.write("IHDR".to_slice)
+  png.write_byte((width >> 24).to_u8)
+  png.write_byte((width >> 16).to_u8)
+  png.write_byte((width >> 8).to_u8)
+  png.write_byte(width.to_u8)
+  png.write_byte((height >> 24).to_u8)
+  png.write_byte((height >> 16).to_u8)
+  png.write_byte((height >> 8).to_u8)
+  png.write_byte(height.to_u8)
+  png.write(Bytes[0x08, 0x02, 0x00, 0x00, 0x00])
+  png.write(Bytes[0x00, 0x00, 0x00, 0x00])
+  png.to_slice
 end
 
 private def with_cli_temp_dir(& : String ->) : Nil

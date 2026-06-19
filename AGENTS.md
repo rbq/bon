@@ -20,6 +20,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Preserve the executable name `bon`.
 - Preserve default receipt behavior for 80 mm paper and 203 dpi printer options.
 - Keep destination input support for `.pdf`, `.png`, `.jpg`, `.jpeg`, `.typ`, and `.tex`.
+- Supported print inputs may be provided as filesystem paths or as one stdin stream via `-`.
 - Do not add interactive file selection unless explicitly requested.
 
 ## Commands
@@ -52,6 +53,9 @@ When modifying the application, keep all of the following in sync:
 - The local TOML parser intentionally supports only the subset needed by the config schema: tables, dotted tables, strings, booleans, integers, floats, and string arrays.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
+- Print stdin uses `-` as a source marker, materializes the stream into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
+- `--stdin-as=pdf|png|jpg|jpeg|typ|tex` explicitly sets the stdin type; omitted stdin type auto-detects only PDF, PNG, and JPEG binary signatures.
+- Typst and LaTeX stdin require explicit `--stdin-as` and are compiled from the temporary directory, so project-relative local assets are not available unless the piped source is self-contained.
 - Config `[cups]` is reserved for bon-controlled CUPS behavior such as `copies` and `dry_run`; arbitrary CUPS/driver options live under `[cups.options]` and are passed as `lp -o` values. Empty `[cups.options]` string values remove inherited/default options.
 - PDF inputs pass through unchanged before width handling.
 - PDF size detection scans discoverable `/CropBox` and `/MediaBox` entries on a best-effort basis, uses maximum discovered width/height for conservative validation, and is not a full parser for compressed/object-stream boxes.
