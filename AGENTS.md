@@ -9,14 +9,14 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Use `mise` as the entry point for reproducibility.
 - Use generated mise bin stubs when available.
 - Run `mise generate task-stubs` whenever mise task names are added, removed, or renamed.
-- Required tools are pinned in `.mise.toml`: Crystal `1.20.2`, TinyTeX `2026.06`, and Typst `0.14.2`.
+- Required and optional development tools are pinned in `.mise.toml`: Crystal `1.20.2`, TinyTeX `2026.06`, and Typst `0.14.2`.
 - Main development commands are `mise run spec`, `mise run build`, and `mise run run -- --dry-run <file>`.
 - Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason.
 
 ## Workflow Guidance
 
 - Keep temporary intermediates outside the project tree and clean them up.
-- Do not use the parent Bondrucker Python scripts from this project; `bon` is the independent implementation.
+- `bon` is an independent implementation, attempt to keep it self-contained and don't rely on other tools and data on the host machine unless explicitely requested.
 - Preserve the executable name `bon`.
 - Preserve default receipt behavior for 80 mm paper and 203 dpi printer options.
 - Keep destination input support for `.pdf`, `.png`, `.jpg`, `.jpeg`, `.typ`, and `.tex`.
@@ -29,8 +29,8 @@ mise install
 mise run spec
 mise run build
 mise run run -- printer list
-mise run run -- --dry-run ../Wetterbericht.typ
-bin/bon --dry-run ../Wetterbericht.typ
+mise run run -- --dry-run examples/spec/receipt-80mm.typ
+bin/bon --dry-run examples/spec/receipt-80mm.typ
 ```
 
 ## Keeping Things in Sync
@@ -66,3 +66,4 @@ When modifying the application, keep all of the following in sync:
 - Default PDF/Typst/LaTeX crops use Ghostscript `pdfwrite` and remain PDF; the Typst raster/downsample path is only for `render.typst_mode = "raster"`.
 - `render.raster_threshold` and `render.raster_dither` affect only bon-generated 1-bit raster/downsample output, not direct CUPS pass-through or PDF-first `pdfwrite` crops.
 - Height policy: pages taller than `paper.max_media_height_pt` fail instead of being clamped to CUPS media height.
+- Repository-local example inputs live in `examples/spec/` and cover supported suffixes, 58 mm and 80 mm widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths. Use these for smoke tests instead of external files.

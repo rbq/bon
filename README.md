@@ -35,13 +35,13 @@ mise run run -- printer list
 Dry-run a Typst receipt without submitting an `lp` job:
 
 ```sh
-mise run run -- --dry-run ../Wetterbericht.typ
+mise run run -- --dry-run examples/spec/receipt-80mm.typ
 ```
 
 Print one or more files:
 
 ```sh
-mise run run -- receipt.pdf image.png source.typ paper.tex
+mise run run -- examples/spec/variable-pages.pdf examples/spec/receipt.png examples/spec/receipt-80mm.typ examples/spec/receipt.tex
 ```
 
 Validate and inspect configuration:
@@ -55,15 +55,15 @@ mise run run -- config edit
 Render a receipt mockup:
 
 ```sh
-mise run run -- simulate receipt.typ image.png
-mise run run -- sim receipt.jpg
+mise run run -- simulate examples/spec/receipt-80mm.typ examples/spec/receipt.png
+mise run run -- sim examples/spec/receipt.jpg
 ```
 
 Build the executable and run it directly:
 
 ```sh
 mise run build
-bin/bon --dry-run ../Wetterbericht.typ
+bin/bon --dry-run examples/spec/receipt-80mm.typ
 ```
 
 ## CLI
@@ -196,6 +196,8 @@ For each input, `bon`:
 `bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags.
 
 ## Development
+
+Repository-local example inputs live in `examples/spec/`. They accompany the specs and cover supported input suffixes, 58 mm and 80 mm paper widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths.
 
 Run specs:
 
