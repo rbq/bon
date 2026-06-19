@@ -4,4 +4,3 @@
 /.crystal/
 /coverage/
 *.dSYM/
-print_report.md
