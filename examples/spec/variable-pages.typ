@@ -1,4 +1,4 @@
-#set page(width: 80mm, height: 140pt, margin: 8pt)
+#set page(width: 80mm, height: 140pt, margin: 4mm)
 #set text(size: 8pt)
 
 = Short Page
@@ -7,7 +7,7 @@ This first page is intentionally short.
 
 #pagebreak()
 
-#set page(width: 80mm, height: 280pt, margin: 8pt)
+#set page(width: 80mm, height: 280pt, margin: 4mm)
 
 = Long Page
 

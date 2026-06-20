@@ -1,4 +1,4 @@
-#set page(width: 80mm, height: 300pt, margin: 8pt)
+#set page(width: 80mm, height: 300pt, margin: 4mm)
 #set text(size: 9pt)
 
 = 80 mm Receipt

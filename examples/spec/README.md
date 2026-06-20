@@ -1,5 +1,7 @@
 This directory contains small, repository-local inputs used by specs and manual smoke tests.
 
+Text fixtures keep their own content inside bon's default thermal printable widths so smoke-test prints do not lose content to the mandatory side crop. Use at least `4mm` horizontal margins for 80 mm paper and `5mm` horizontal margins for 58 mm paper unless the fixture is intentionally testing crop behavior.
+
 - `receipt-80mm.typ` covers the default 80 mm receipt paper path.
 - `label-58mm.typ` covers narrower 58 mm paper.
 - `variable-pages.typ` and `variable-pages.pdf` cover multiple pages with different heights in one input.

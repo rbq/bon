@@ -1,4 +1,4 @@
-#set page(width: 58mm, height: 180pt, margin: 6pt)
+#set page(width: 58mm, height: 180pt, margin: 5mm)
 #set text(size: 8pt)
 
 = 58 mm Label

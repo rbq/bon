@@ -32,8 +32,8 @@ describe "spec examples" do
     pages = Bon::PDF.page_sizes(File.join(examples_dir, "variable-pages.pdf"))
 
     pages.should eq([
-      Bon::PDF::PageSize.new(204.296, 140.0),
-      Bon::PDF::PageSize.new(204.296, 280.0),
+      Bon::PDF::PageSize.new(226.77165, 140.0),
+      Bon::PDF::PageSize.new(226.77165, 280.0),
     ])
   end
 
