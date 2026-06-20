@@ -51,6 +51,8 @@ When modifying the application, keep all of the following in sync:
 - Config loads built-in defaults, global config from `$XDG_CONFIG_HOME/bon/config.toml` or `~/.config/bon/config.toml`, then local `./config.toml`.
 - While `bon` still lives inside the Bondrucker workspace, `./bon/config.toml` is supported as a transition fallback when the CLI is run from the parent directory.
 - Do not commit repo-local `config.toml`; `config.default.toml` is the tracked template for generated configs.
+- Unless specified otherwise, generated config files should include every available top-level option as commented-out defaults so users can discover settings without activating overrides.
+- Keep `config.default.toml` in sync whenever config options are added, renamed, removed, or default values change.
 - `bon init` is rerunnable: it preserves existing config text by default, updates only `[printer] name`, removes obsolete `[printer] candidates`, and uses `--force` to regenerate from the template.
 - `printer.candidates` is deprecated, ignored during config overlay, and emitted as a CLI warning when present.
 - Printer-specific overrides are stored under `[printer.<queue>.paper]`, `[printer.<queue>.render]` for `image_ppi`, and `[printer.<queue>.cups.options]`; they are applied only after CUPS queue discovery for printing.

@@ -147,49 +147,51 @@ Config is merged in this order:
 
 While this project still lives inside the Bondrucker workspace, `./bon/config.toml` is also supported as a transition fallback when no local `./config.toml` exists. The repository ships `config.default.toml` as the user-facing template; machine-specific `config.toml` files should remain untracked.
 
-Example:
+Example generated config. Uncomment settings to override the built-in defaults:
 
 ```toml
 [printer]
-name = ""
+# Optional selected CUPS queue. Leave commented for automatic usable thermal discovery.
+# name = "EPSON_TM_m30III"
 
 [paper]
-width_mm = 80.0
-printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots
-min_media_pt = 72.0
-max_media_height_pt = 5669.3
+# width_mm = 80.0
+# printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots
+# min_media_pt = 72.0
+# max_media_height_pt = 5669.3
 
 [render]
-typst_bin = "typst"
-typst_mode = "pdf"
-image_ppi = 203
-raster_ppi_multiplier = 2
-raster_threshold = 0.125
-raster_dither = "none"
-latex_engine = "auto"
+# typst_bin = "typst"
+# typst_mode = "pdf"
+# image_ppi = 203
+# raster_ppi_multiplier = 2
+# raster_threshold = 0.125
+# raster_dither = "none"
+# latex_engine = "auto"
 
 [simulate]
-background_tint = "#f5f1e0"
-foreground_color = "#232320"
-foreground_fade = 1.0
+# background_tint = "#f5f1e0"
+# foreground_color = "#232320"
+# foreground_fade = 1.0
 
 [cups]
-copies = 1
-dry_run = false
+# copies = 1
+# dry_run = false
 
 [cups.options]
-Resolution = "203x203dpi"
-TmxPaperCut = "CutPerPage"
-TmxPaperReduction = "Off"
+# Resolution = "203x203dpi"
+# TmxPaperCut = "CutPerPage"
+# TmxPaperReduction = "Off"
 
-[printer.EPSON_TM_m30III.paper]
-width_mm = 80.0
+# Optional printer-scoped hardware overrides. Quote queue names containing dots.
+# [printer.EPSON_TM_m30III.paper]
+# width_mm = 80.0
 
-[printer."Queue.Name".render]
-image_ppi = 180
+# [printer."Queue.Name".render]
+# image_ppi = 180
 
-[printer.EPSON_TM_m30III.cups.options]
-TmxPaperCut = "CutPerPage"
+# [printer.EPSON_TM_m30III.cups.options]
+# TmxPaperCut = "CutPerPage"
 ```
 
 Local scalar keys override global scalar keys. `[cups]` contains bon-controlled CUPS behavior (`copies` maps to `lp -n`; `dry_run` suppresses job submission). `[cups.options]` contains arbitrary CUPS job or driver options that are passed as `lp -o KEY=VALUE`; options are merged by key, and setting an option to an empty string removes an inherited/default option. `paper.printable_width_pt = 0.0` automatically selects common thermal printable widths, including 384 dots for 58 mm paper and 576 dots for 80 mm paper at 203 dpi; set a positive point value to override it. Use an empty `printer.name` for automatic discovery, including to clear a global pinned printer from a local config.

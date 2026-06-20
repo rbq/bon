@@ -80,26 +80,26 @@ describe Bon::Config do
   end
 
   it "includes raster controls in generated TOML defaults" do
-    Bon::Config.default_toml.should contain("raster_ppi_multiplier = 2")
-    Bon::Config.default_toml.should contain("raster_threshold = 0.125")
-    Bon::Config.default_toml.should contain("raster_dither = \"none\"")
+    Bon::Config.default_toml.should contain("# raster_ppi_multiplier = 2")
+    Bon::Config.default_toml.should contain("# raster_threshold = 0.125")
+    Bon::Config.default_toml.should contain("# raster_dither = \"none\"")
   end
 
   it "defaults Typst input preparation to PDF mode" do
-    Bon::Config.default_toml.should contain("typst_mode = \"pdf\"")
+    Bon::Config.default_toml.should contain("# typst_mode = \"pdf\"")
   end
 
   it "includes the simulation background tint in generated TOML defaults" do
     Bon::Config.default_toml.should contain("[simulate]")
-    Bon::Config.default_toml.should contain("background_tint = \"#f5f1e0\"")
+    Bon::Config.default_toml.should contain("# background_tint = \"#f5f1e0\"")
   end
 
   it "includes simulate foreground defaults in generated TOML defaults" do
     defaults = Bon::Config.default_toml
 
     defaults.should contain("[simulate]")
-    defaults.should contain("foreground_color = \"#232320\"")
-    defaults.should contain("foreground_fade = 1.0")
+    defaults.should contain("# foreground_color = \"#232320\"")
+    defaults.should contain("# foreground_fade = 1.0")
   end
 
   it "uses automatic printable widths for common thermal paper sizes" do
@@ -133,8 +133,30 @@ describe Bon::Config do
   it "defaults thermal paper cutting to after each page" do
     defaults = Bon::Config.default_toml
 
-    defaults.should contain("TmxPaperCut = \"CutPerPage\"")
+    defaults.should contain("# TmxPaperCut = \"CutPerPage\"")
     defaults.should_not contain("paper_cut")
+  end
+
+  it "comments out generated top-level default options" do
+    defaults = Bon::Config.default_toml
+
+    defaults.should contain("# width_mm = 80.0")
+    defaults.should contain("# min_media_pt = 72.0")
+    defaults.should contain("# max_media_height_pt = 5669.3")
+    defaults.should contain("# typst_bin = \"typst\"")
+    defaults.should contain("# image_ppi = 203")
+    defaults.should contain("# latex_engine = \"auto\"")
+    defaults.should contain("# copies = 1")
+    defaults.should contain("# dry_run = false")
+    defaults.should contain("# Resolution = \"203x203dpi\"")
+    defaults.should_not contain("\nwidth_mm = 80.0")
+    defaults.should_not contain("\ncopies = 1")
+  end
+
+  it "keeps the tracked default config template in sync with generated defaults" do
+    template_path = File.expand_path("../config.default.toml", __DIR__)
+
+    File.read(template_path).should eq(Bon::Config.default_toml)
   end
 
   it "does not include active printer candidates in generated TOML defaults" do

@@ -191,7 +191,55 @@ module Bon
 
   module DefaultConfig
     def self.template(selected_printer : String? = nil) : String
-      Config.new(printer_name: selected_printer).to_toml
+      defaults = Config.new
+
+      String.build do |io|
+        io << "# Generated bon configuration template. Uncomment settings to override built-in defaults.\n\n"
+        io << "[printer]\n"
+        if selected_printer
+          io << "name = \"#{toml_escape(selected_printer)}\"\n"
+        else
+          io << "# Optional selected CUPS queue. Leave commented for automatic usable thermal discovery.\n"
+          io << "# name = \"EPSON_TM_m30III\"\n"
+        end
+        io << "\n"
+
+        io << "[paper]\n"
+        io << "# width_mm = #{defaults.paper_width_mm}\n"
+        io << "# printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots\n"
+        io << "# min_media_pt = #{defaults.min_media_pt}\n"
+        io << "# max_media_height_pt = #{defaults.max_media_height_pt}\n\n"
+
+        io << "[render]\n"
+        io << "# typst_bin = \"#{toml_escape(defaults.typst_bin)}\"\n"
+        io << "# typst_mode = \"#{toml_escape(defaults.typst_mode)}\"\n"
+        io << "# image_ppi = #{defaults.image_ppi}\n"
+        io << "# raster_ppi_multiplier = #{defaults.raster_ppi_multiplier}\n"
+        io << "# raster_threshold = #{defaults.raster_threshold}\n"
+        io << "# raster_dither = \"#{toml_escape(defaults.raster_dither)}\"\n"
+        io << "# latex_engine = \"#{toml_escape(defaults.latex_engine)}\"\n\n"
+
+        io << "[simulate]\n"
+        io << "# background_tint = \"#{toml_escape(defaults.simulate_background_tint)}\"\n"
+        io << "# foreground_color = \"#{toml_escape(defaults.simulate_foreground_color)}\"\n"
+        io << "# foreground_fade = #{defaults.simulate_foreground_fade}\n\n"
+
+        io << "[cups]\n"
+        io << "# copies = #{defaults.cups_copies}\n"
+        io << "# dry_run = #{defaults.cups_dry_run}\n\n"
+
+        io << "[cups.options]\n"
+        defaults.cups_options.keys.sort.each do |key|
+          io << "# #{key} = \"#{toml_escape(defaults.cups_options[key])}\"\n"
+        end
+        io << "\n# Optional printer-scoped hardware overrides. Quote queue names containing dots.\n"
+        io << "# [printer.EPSON_TM_m30III.paper]\n"
+        io << "# width_mm = 80.0\n"
+        io << "# [printer.\"Queue.Name\".render]\n"
+        io << "# image_ppi = 180\n"
+        io << "# [printer.EPSON_TM_m30III.cups.options]\n"
+        io << "# TmxPaperCut = \"CutPerPage\"\n"
+      end
     end
 
     def self.toml_escape(value : String) : String

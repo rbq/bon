@@ -1,37 +1,37 @@
-# Generated bon configuration template. Copy to config.toml or run `bon init`.
+# Generated bon configuration template. Uncomment settings to override built-in defaults.
 
 [printer]
 # Optional selected CUPS queue. Leave commented for automatic usable thermal discovery.
 # name = "EPSON_TM_m30III"
 
 [paper]
-width_mm = 80.0
+# width_mm = 80.0
 # printable_width_pt = 0.0 # auto: 58 mm => 384 dots, 80 mm => 576 dots
-min_media_pt = 72.0
-max_media_height_pt = 5669.3
+# min_media_pt = 72.0
+# max_media_height_pt = 5669.3
 
 [render]
-typst_bin = "typst"
-typst_mode = "pdf"
-image_ppi = 203
-raster_ppi_multiplier = 2
-raster_threshold = 0.125
-raster_dither = "none"
-latex_engine = "auto"
+# typst_bin = "typst"
+# typst_mode = "pdf"
+# image_ppi = 203
+# raster_ppi_multiplier = 2
+# raster_threshold = 0.125
+# raster_dither = "none"
+# latex_engine = "auto"
 
 [simulate]
-background_tint = "#f5f1e0"
-foreground_color = "#232320"
-foreground_fade = 1.0
+# background_tint = "#f5f1e0"
+# foreground_color = "#232320"
+# foreground_fade = 1.0
 
 [cups]
-copies = 1
-dry_run = false
+# copies = 1
+# dry_run = false
 
 [cups.options]
-Resolution = "203x203dpi"
-TmxPaperCut = "CutPerPage"
-TmxPaperReduction = "Off"
+# Resolution = "203x203dpi"
+# TmxPaperCut = "CutPerPage"
+# TmxPaperReduction = "Off"
 
 # Optional printer-scoped hardware overrides. Quote queue names containing dots.
 # [printer.EPSON_TM_m30III.paper]
