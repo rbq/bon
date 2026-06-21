@@ -48,7 +48,15 @@ jobs:
         run: mise run build
 
       - name: Verify binary
-        run: bin/bon --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          shard_version="$(crystal eval 'require "yaml"; puts YAML.parse(File.read("shard.yml"))["version"].as_s')"
+          binary_version="$(bin/bon-release --version)"
+          test "$binary_version" = "bon $shard_version"
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            test "${GITHUB_REF_NAME#v}" = "$shard_version"
+          fi
 
       - name: Package release archive
         shell: bash
@@ -60,7 +68,7 @@ jobs:
           fi
           asset="bon-${version}-${{ matrix.asset_suffix }}"
           mkdir -p "dist/$asset"
-          cp bin/bon "dist/$asset/bon"
+          cp bin/bon-release "dist/$asset/bon"
           cp README.md LICENSE "dist/$asset/"
           chmod 755 "dist/$asset/bon"
           tar -C dist -czf "dist/$asset.tar.gz" "$asset"

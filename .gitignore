@@ -1,7 +1,11 @@
-/bin/bon
-/bin/bon.dwarf
-/lib/
-/.crystal/
-/coverage/
 *.dSYM/
+/.crystal/
+/*.pdf
+/*.png
+/bin/bon-debug
+/bin/bon-debug.dwarf
+/bin/bon-release
+/bin/bon-release.dwarf
 /config.toml
+/coverage/
+/lib/
