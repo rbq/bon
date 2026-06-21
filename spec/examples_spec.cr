@@ -4,7 +4,8 @@ require "../src/bon/document"
 require "../src/bon/simulate"
 
 describe "spec examples" do
-  examples_dir = File.expand_path("../examples/spec", __DIR__)
+  examples_dir = File.expand_path("fixtures/examples", __DIR__)
+  assets_dir = File.expand_path("../src/bon/assets", __DIR__)
 
   it "provides one local input for every supported document suffix" do
     suffixes = Dir.children(examples_dir).map { |path| File.extname(path).downcase }.uniq.sort
@@ -35,6 +36,16 @@ describe "spec examples" do
       Bon::PDF::PageSize.new(226.77165, 140.0),
       Bon::PDF::PageSize.new(226.77165, 280.0),
     ])
+  end
+
+  it "defaults the margins calibration sheet to 80 mm by 80 mm" do
+    source = File.read(File.join(assets_dir, "margins.typ"))
+
+    source.should contain("#let paper-width = 80mm")
+    source.should contain("#let paper-height = 80mm")
+    source.should contain("#set page(width: paper-width, height: paper-height, margin: 0mm)")
+    source.should contain("#pagebreak()")
+    source.should contain("#calibration-page(top: edge-margin, bottom: edge-margin)")
   end
 
   it "uses the examples directory for default simulation discovery" do
