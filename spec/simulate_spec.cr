@@ -57,6 +57,28 @@ describe Bon::Simulate do
     end
   end
 
+  it "applies minimum printer margins even when configured margins are zero" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "receipt.png")
+      Bon::Simulate.write_png(source, 1, 1, Bytes[255, 255, 255])
+      options = Bon::Simulate::Options.new(
+        paper_mm: 1.0,
+        content_mm: 1.0,
+        mockup_ppi: 25,
+        top_mm: 0.0,
+        bottom_mm: 0.0,
+        min_top_mm: 12.0,
+        min_bottom_mm: 2.0,
+        out_dir: dir
+      )
+
+      outputs = Bon::Simulate.render_sources([source], options)
+      mockup = Bon::Simulate.read_png(outputs.first)
+
+      mockup.height.should eq(15)
+    end
+  end
+
   it "uses printable width to center-crop wider PNG inputs by default" do
     with_temp_dir do |dir|
       source = File.join(dir, "wide.png")
@@ -78,6 +100,8 @@ describe Bon::Simulate do
         mockup_ppi: 203,
         top_mm: 0.0,
         bottom_mm: 0.0,
+        min_top_mm: 0.0,
+        min_bottom_mm: 0.0,
         out_dir: dir
       )
 
@@ -85,8 +109,49 @@ describe Bon::Simulate do
       mockup = Bon::Simulate.read_png(outputs.first)
 
       mockup.width.should eq((80.0 / 25.4 * 203).round.to_i)
-      mockup.height.should eq(6)
+      mockup.height.should eq(4)
       dark_pixel_count(mockup).should eq(0)
+    end
+  end
+
+  it "renders one mockup per Typst page" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "multi.typ")
+      fake_png = File.join(dir, "content.png")
+      fake_typst = File.join(dir, "typst")
+      File.write(source, "#set page(width: 80mm, height: 80mm)\nfirst\n#pagebreak()\nsecond\n")
+      Bon::Simulate.write_png(fake_png, 2, 1, Bytes[0, 0, 0, 255, 255, 255])
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        output=""
+        for arg do
+          output="$arg"
+        done
+        case "$output" in
+          *"{p}"*)
+            prefix=${output%%"{p}"*}
+            suffix=${output#*"{p}"}
+            cp "$BON_FAKE_PNG" "${prefix}1${suffix}"
+            cp "$BON_FAKE_PNG" "${prefix}2${suffix}"
+            ;;
+          *)
+            cp "$BON_FAKE_PNG" "$output"
+            ;;
+        esac
+        SH
+      File.chmod(fake_typst, 0o755)
+
+      with_env({"BON_FAKE_PNG" => fake_png}) do
+        options = Bon::Simulate::Options.new(typst_bin: fake_typst, out_dir: dir, top_mm: 0.0, bottom_mm: 0.0)
+
+        outputs = Bon::Simulate.render_sources([source], options)
+
+        outputs.should eq([
+          File.join(dir, "multi-page-001_80mm-printout.png"),
+          File.join(dir, "multi-page-002_80mm-printout.png"),
+        ])
+        outputs.each { |output| File.exists?(output).should be_true }
+      end
     end
   end
 
@@ -241,8 +306,8 @@ describe Bon::Cli do
         Dir.cd(dir) do
           File.write("config.toml", <<-TOML)
             [paper]
-            width_mm = 1.0
-            printable_width_pt = 1.0
+            width_mm = 2.0
+            printable_width_pt = 5.0
 
             [render]
             image_ppi = 25
@@ -250,6 +315,8 @@ describe Bon::Cli do
             [simulate]
             foreground_color = "#ff0000"
             foreground_fade = 1.0
+            min_top_mm = 0.0
+            min_bottom_mm = 0.0
           TOML
 
           stdout = IO::Memory.new
@@ -262,6 +329,43 @@ describe Bon::Cli do
           red, green, blue = pixel_at(stdout.to_s.strip, 0)
           red.should be > green
           red.should be > blue
+        end
+      end
+    end
+  end
+
+  it "uses configured simulate vertical margins" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "receipt.png")
+      xdg_config = File.join(dir, "xdg")
+      Bon::Simulate.write_png(source, 1, 1, Bytes[255, 255, 255])
+
+      with_env({"XDG_CONFIG_HOME" => xdg_config}) do
+        Dir.cd(dir) do
+          File.write("config.toml", <<-TOML)
+            [paper]
+            width_mm = 1.0
+            printable_width_pt = 1.0
+
+            [render]
+            image_ppi = 25
+
+            [simulate]
+            top_mm = 4.0
+            bottom_mm = 8.0
+            min_top_mm = 0.0
+            min_bottom_mm = 0.0
+          TOML
+
+          stdout = IO::Memory.new
+          stderr = IO::Memory.new
+
+          status = Bon::Cli.run(["simulate", "--mockup-ppi=25", File.basename(source)], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          mockup = Bon::Simulate.read_png(stdout.to_s.strip)
+          mockup.height.should eq(13)
         end
       end
     end

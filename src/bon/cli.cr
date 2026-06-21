@@ -8,7 +8,8 @@ require "./simulate"
 
 module Bon
   class Cli
-    VERSION = "0.1.0"
+    VERSION = {{ read_file("shard.yml").match(/^version:\s*(\S+)\s*$/m)[1] }}
+    MARGINS_TYP = {{ read_file("src/bon/assets/margins.typ") }}
 
     def self.run(argv = ARGV, output_io : IO = STDOUT, error_io : IO = STDERR, input_io : IO = STDIN) : Int32
       new(argv, output_io, error_io, input_io).run
@@ -83,17 +84,23 @@ module Bon
         return 0
       end
 
+      margins_command = margins_command?(@files)
       if @files.empty?
         @error_io.puts(parser)
         @error_io.puts("error: FILE is required")
         return 2
       end
+      raise Error.new("Unexpected arguments for bon print margins: #{@files[1..].join(" ")}") if @files.first? == "margins" && !margins_command
       validate_stdin_sources(@files)
 
       queue = Cups.discover(config)
       config.apply_printer_overrides!(queue.name)
       config.validate!
-      print_documents(@files, queue.name, config)
+      if margins_command
+        with_margins_typ_source { |source| print_documents([source], queue.name, config) }
+      else
+        print_documents(@files, queue.name, config)
+      end
       0
     end
 
@@ -110,7 +117,9 @@ module Bon
       OptionParser.new do |parser|
         parser.banner = <<-TEXT
           Usage: bon [print] [options] FILE...|-
+                 bon print margins [options]
                  bon simulate [options] [FILE...]
+                 bon simulate margins [options]
                  bon sim [options] [FILE...]
                  bon printer [list]
                  bon config <check|show|edit>
@@ -118,6 +127,7 @@ module Bon
 
           Commands:
             print      Print one or more files. This is the default command.
+            margins    Print the built-in 10 mm margin calibration sheet.
             simulate   Render receipt mockups for Typst and image inputs.
             sim        Alias for simulate.
             printer    List discovered CUPS printer queues.
@@ -141,7 +151,7 @@ module Bon
         parser.on("--stdin-as=TYPE", "Type for stdin input: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
-        parser.on("--version", "Show version") { @show_version = true }
+        parser.on("-v", "--version", "Show version") { @show_version = true }
         parser.on("-h", "--help", "Show help") { @show_help = true }
         parser.unknown_args do |before_dash, after_dash|
           @files.concat(before_dash)
@@ -329,6 +339,10 @@ module Bon
         printable_width_mm: config.printable_width_pt * 25.4 / 72.0,
         printable_width_auto: !config.explicit_printable_width_pt?,
         ppi: config.image_ppi,
+        top_mm: config.simulate_top_mm,
+        bottom_mm: config.simulate_bottom_mm,
+        min_top_mm: config.simulate_min_top_mm,
+        min_bottom_mm: config.simulate_min_bottom_mm,
         typst_bin: config.typst_bin,
         background_tint: config.simulate_background_tint,
         foreground_rgb: Simulate.parse_color(config.simulate_foreground_color),
@@ -345,15 +359,30 @@ module Bon
       end
 
       validate_simulate_options(options)
-      sources = files.empty? ? Simulate.default_sources : files
-      outputs = Simulate.render_sources(sources, options, @output_io, @error_io)
+      margins_command = margins_command?(files)
+      raise Error.new("Unexpected arguments for bon simulate margins: #{files[1..].join(" ")}") if files.first? == "margins" && !margins_command
+      outputs = if margins_command
+                  options.out_dir ||= Dir.current
+                  with_margins_typ_source { |source| Simulate.render_sources([source], options, @output_io, @error_io) }
+                else
+                  sources = files.empty? ? Simulate.default_sources : files
+                  Simulate.render_sources(sources, options, @output_io, @error_io)
+                end
       outputs.each { |output| @output_io.puts(File.expand_path(output)) }
       0
     end
 
     private def build_simulate_parser(options : Simulate::Options, files : Array(String), show_help : Array(Bool)) : OptionParser
       OptionParser.new do |parser|
-        parser.banner = "Usage: bon simulate|sim [options] [FILE...]"
+        parser.banner = <<-TEXT
+          Usage: bon simulate|sim [options] [FILE...]
+                 bon simulate margins [options]
+
+          Commands:
+            margins    Render the built-in 10 mm margin calibration sheet.
+
+          Simulate options:
+          TEXT
         parser.on("-f FORMAT", "--format=FORMAT", "Output format, png or pdf") { |value| options.format = value.sub(/^\./, "") }
         parser.on("--paper-mm=N", "Simulated paper width in millimeters") do |value|
           options.paper_mm = parse_float(value, "--paper-mm")
@@ -391,7 +420,7 @@ module Bon
         raise Error.new("--content-mm must be positive") unless content_mm > 0
         raise Error.new("--content-mm must not exceed --paper-mm") if content_mm > options.paper_mm
       end
-      raise Error.new("--top-mm and --bottom-mm cannot be negative") if options.top_mm < 0 || options.bottom_mm < 0
+      raise Error.new("simulate margin values cannot be negative") if options.top_mm < 0 || options.bottom_mm < 0 || options.min_top_mm < 0 || options.min_bottom_mm < 0
       raise Error.new("--foreground-fade must be between 0.0 and 1.0") unless options.foreground_fade >= 0.0 && options.foreground_fade <= 1.0
       Simulate.parse_rgb(options.background_tint)
     end
@@ -559,6 +588,18 @@ module Bon
       end
     end
 
+    private def margins_command?(files : Array(String)) : Bool
+      files == ["margins"]
+    end
+
+    private def with_margins_typ_source(& : String -> T) : T forall T
+      with_temp_dir("bon-margins-") do |temp_dir|
+        source = File.join(temp_dir, "margins.typ")
+        File.write(source, MARGINS_TYP)
+        yield source
+      end
+    end
+
     private def validate_stdin_sources(files : Array(String)) : Nil
       stdin_count = files.count { |file| file == "-" }
       raise Error.new("stdin input can only be used once") if stdin_count > 1
@@ -600,7 +641,7 @@ module Bon
       raise Error.new("--stdin-as must be one of: pdf, png, jpg, jpeg, typ, tex")
     end
 
-    private def with_temp_dir(prefix : String, & : String ->) : Nil
+    private def with_temp_dir(prefix : String, & : String -> T) : T forall T
       base = Dir.tempdir
       path = ""
       100.times do
@@ -625,7 +666,7 @@ module Bon
     end
 
     private def version_requested?(argv : Array(String)) : Bool
-      argv.any? { |arg| arg == "--version" }
+      argv.any? { |arg| arg == "-v" || arg == "--version" }
     end
 
     private def parse_int(value : String, option : String) : Int32

@@ -1,5 +1,6 @@
 require "file_utils"
 require "spec"
+require "yaml"
 
 require "../src/bon/cli"
 
@@ -14,12 +15,15 @@ describe Bon::Cli do
     stderr.to_s.should eq("")
     help = stdout.to_s
     help.should contain("Usage: bon [print] [options] FILE...")
+    help.should contain("bon print margins [options]")
     help.should contain("bon simulate [options] [FILE...]")
+    help.should contain("bon simulate margins [options]")
     help.should contain("bon sim [options] [FILE...]")
     help.should contain("bon printer [list]")
     help.should contain("bon config <check|show|edit>")
     help.should contain("bon init [options]")
     help.should contain("print      Print one or more files")
+    help.should contain("margins    Print the built-in 10 mm margin calibration sheet")
     help.should contain("simulate   Render receipt mockups")
     help.should contain("sim        Alias for simulate")
     help.should contain("printer    List discovered CUPS printer queues")
@@ -40,6 +44,8 @@ describe Bon::Cli do
     stderr.to_s.should eq("")
     help = stdout.to_s
     help.should contain("Usage: bon simulate|sim [options] [FILE...]")
+    help.should contain("bon simulate margins [options]")
+    help.should contain("margins    Render the built-in 10 mm margin calibration sheet")
     help.should contain("--no-crop")
     help.should contain("--background-tint=HEX")
   end
@@ -59,7 +65,13 @@ describe Bon::Cli do
         stderr = IO::Memory.new
         Bon::Cli.run(["--version"], stdout, stderr).should eq(0)
         stderr.to_s.should eq("")
-        stdout.to_s.should contain("bon ")
+        stdout.to_s.should eq("bon #{YAML.parse(File.read(File.join(__DIR__, "..", "shard.yml")))["version"].as_s}\n")
+
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        Bon::Cli.run(["-v"], stdout, stderr).should eq(0)
+        stderr.to_s.should eq("")
+        stdout.to_s.should eq("bon #{YAML.parse(File.read(File.join(__DIR__, "..", "shard.yml")))["version"].as_s}\n")
       end
     end
   end
@@ -328,9 +340,65 @@ describe Bon::Cli do
           output.should contain("-o media=Custom.204.296x300")
           output.should contain("-o Resolution=203x203dpi")
           output.should contain("-o TmxPaperCut=CutPerPage")
-          output.should contain("-o TmxPaperReduction=Off")
+          output.should contain("-o TmxPaperReduction=Top")
           output.should contain("001-receipt-print.pdf")
           output.should_not contain("001-receipt-print.png")
+        end
+      end
+    end
+  end
+
+  it "dry-runs the built-in print margin calibration sheet" do
+    with_cli_temp_dir do |dir|
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["print", "margins", "--dry-run"], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          output = stdout.to_s
+          output.should contain("typst compile --root")
+          output.should contain("margins.typ")
+          output.should contain("001-margins.pdf")
+          output.should contain("lp -d EPSON_TM_m30III -n 1")
+        end
+      end
+    end
+  end
+
+  it "renders the built-in simulate margin calibration sheet into the current directory" do
+    with_cli_temp_dir do |dir|
+      fake_png = File.join(dir, "content.png")
+      fake_typst = File.join(dir, "typst")
+      xdg_config = File.join(dir, "xdg")
+      Bon::Simulate.write_png(fake_png, 2, 1, Bytes[0, 0, 0, 255, 255, 255])
+      File.write(fake_typst, <<-SH)
+        #!/bin/sh
+        output=""
+        for arg do
+          output="$arg"
+        done
+        cp "$BON_FAKE_PNG" "$output"
+        SH
+      File.chmod(fake_typst, 0o755)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"BON_FAKE_PNG" => fake_png, "XDG_CONFIG_HOME" => xdg_config}) do
+        Dir.cd(dir) do
+          expected_output = File.join(Dir.current, "margins_80mm-printout.png")
+
+          status = Bon::Cli.run(["simulate", "margins", "--typst-bin=#{fake_typst}", "--top-mm=0", "--bottom-mm=0"], stdout, stderr)
+
+          status.should eq(0)
+          stderr.to_s.should eq("")
+          stdout.to_s.strip.should eq(expected_output)
+          File.exists?(expected_output).should be_true
         end
       end
     end

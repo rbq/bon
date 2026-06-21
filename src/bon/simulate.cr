@@ -14,6 +14,10 @@ module Bon
 
     DEFAULT_PPI             = 203
     DEFAULT_MOCKUP_PPI      = 406
+    DEFAULT_TOP_MM          = 10.0
+    DEFAULT_BOTTOM_MM       = 14.0
+    DEFAULT_MIN_TOP_MM      = 12.0
+    DEFAULT_MIN_BOTTOM_MM   = 2.0
     DEFAULT_FOREGROUND_FADE = 1.0
     PAPER_RGB               = {245, 241, 224}
     INK_RGB                 = {35, 35, 32}
@@ -29,6 +33,8 @@ module Bon
       property mockup_ppi : Int32
       property top_mm : Float64
       property bottom_mm : Float64
+      property min_top_mm : Float64
+      property min_bottom_mm : Float64
       property out_dir : String?
       property typst_bin : String
       property background_tint : String
@@ -43,8 +49,10 @@ module Bon
                      @no_crop = false,
                      @ppi = DEFAULT_PPI,
                      @mockup_ppi = DEFAULT_MOCKUP_PPI,
-                     @top_mm = 10.0,
-                     @bottom_mm = 14.0,
+                     @top_mm = DEFAULT_TOP_MM,
+                     @bottom_mm = DEFAULT_BOTTOM_MM,
+                     @min_top_mm = DEFAULT_MIN_TOP_MM,
+                     @min_bottom_mm = DEFAULT_MIN_BOTTOM_MM,
                      @out_dir = nil,
                      @typst_bin = "typst",
                      @background_tint = "#f5f1e0",
@@ -68,7 +76,7 @@ module Bon
 
       temp_dir = create_temp_dir("bon-simulate-")
       begin
-        sources.map { |source| render_source(File.expand_path(source), temp_dir, options, output_io, error_io) }
+        sources.flat_map { |source| render_source(File.expand_path(source), temp_dir, options, output_io, error_io) }
       ensure
         FileUtils.rm_rf(temp_dir)
       end
@@ -78,7 +86,7 @@ module Bon
       ["*.typ", "*.png", "*.jpg", "*.jpeg"].flat_map { |pattern| Dir.glob(File.join(cwd, pattern)) }.sort
     end
 
-    def self.render_source(source : String, temp_dir : String, options : Options, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.render_source(source : String, temp_dir : String, options : Options, output_io : IO = STDOUT, error_io : IO = STDERR) : Array(String)
       raise Error.new("Simulation input not found: #{source}") unless File.exists?(source)
       raise Error.new("Not a file: #{source}") unless File.file?(source)
       ext = File.extname(source).downcase
@@ -89,30 +97,40 @@ module Bon
         raise Error.new("Input width #{format_mm(source_width)}mm exceeds #{format_mm(options.paper_mm)}mm paper width: #{source}")
       end
       content_width = content_width_mm(source_width, options)
-      output = output_path(source, options)
-      FileUtils.mkdir_p(File.dirname(output))
       basename = File.basename(source, ext)
-      intermediate_png = ext == ".png" ? source : File.join(temp_dir, "#{basename}-content.png")
-      mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{basename}-mockup.png")
       paper_rgb = parse_rgb(options.background_tint)
+      intermediate_pngs = [] of String
 
       case ext
       when ".typ"
-        run_typst(options.typst_bin, source, intermediate_png, "png", options.ppi, Typst.root_for(source), output_io, error_io)
+        intermediate_pngs = render_typst_pages(options.typst_bin, source, temp_dir, basename, options.ppi, Typst.root_for(source), output_io, error_io)
       when ".jpg", ".jpeg"
+        intermediate_png = File.join(temp_dir, "#{basename}-content.png")
         render_jpeg_to_png(source, intermediate_png, temp_dir, options, output_io, error_io)
+        intermediate_pngs << intermediate_png
+      else
+        intermediate_pngs << source
       end
 
-      simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, options.top_mm, options.bottom_mm, seed_for(source), source_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
-      convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
-      output
+      multiple_pages = intermediate_pngs.size > 1
+      intermediate_pngs.map_with_index(1) do |intermediate_png, page_number|
+        output = output_path(source, options, multiple_pages ? page_number : nil)
+        FileUtils.mkdir_p(File.dirname(output))
+        mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{basename}-mockup-#{page_number}.png")
+
+        simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, effective_top_mm(options), effective_bottom_mm(options), seed_for(source) + page_number, source_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
+        convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
+        output
+      end
     end
 
-    def self.output_path(source : String, options : Options) : String
+    def self.output_path(source : String, options : Options, page_number : Int32? = nil) : String
       source_path = File.expand_path(source)
       output_dir = options.out_dir || File.dirname(source_path)
       ext = File.extname(source_path)
-      File.join(File.expand_path(output_dir), "#{File.basename(source_path, ext)}_#{mm_label(options.paper_mm)}mm-printout.#{options.format}")
+      basename = File.basename(source_path, ext)
+      basename = "#{basename}-page-#{page_number.to_s.rjust(3, '0')}" if page_number
+      File.join(File.expand_path(output_dir), "#{basename}_#{mm_label(options.paper_mm)}mm-printout.#{options.format}")
     end
 
     def self.simulate_png(source_png : String, output_png : String, paper_mm : Float64, content_width_mm : Float64, mockup_ppi : Int32, top_mm : Float64, bottom_mm : Float64, seed : Int32, source_width_mm : Float64? = nil, paper_rgb = PAPER_RGB, foreground_rgb : RGB = INK_RGB, foreground_fade : Float64 = DEFAULT_FOREGROUND_FADE) : Nil
@@ -289,6 +307,15 @@ module Bon
       run_typst(typst_bin, wrapper, output, format, ppi, temp_dir, output_io, error_io)
     end
 
+    private def self.render_typst_pages(typst_bin : String, source : String, temp_dir : String, basename : String, ppi : Int32, root : String, output_io : IO, error_io : IO) : Array(String)
+      output_pattern = File.join(temp_dir, "#{basename}-content-{p}.png")
+      run_typst(typst_bin, source, output_pattern, "png", ppi, root, output_io, error_io)
+      page_pattern = output_pattern.gsub("{p}", "*")
+      pages = Dir.glob(page_pattern).sort_by { |path| page_number_from_path(path) || Int32::MAX }
+      raise Error.new("Typst simulation render did not produce PNG pages for #{source}") if pages.empty?
+      pages
+    end
+
     private def self.run_typst(typst_bin : String, input : String, output : String, format : String, ppi : Int32, root : String, output_io : IO, error_io : IO) : Nil
       typst = typst_bin.includes?(File::SEPARATOR) ? typst_bin : Command.require_executable(typst_bin)
       Command.run([
@@ -350,12 +377,26 @@ module Bon
       formatted.sub(/\.0+$/, "").sub(/(\.\d*?)0+$/, "\\1")
     end
 
+    private def self.page_number_from_path(path : String) : Int32?
+      File.basename(path).match(/-(\d+)\.png$/).try { |match| match[1].to_i }
+    end
+
+    private def self.effective_top_mm(options : Options) : Float64
+      {options.top_mm, options.min_top_mm}.max
+    end
+
+    private def self.effective_bottom_mm(options : Options) : Float64
+      {options.bottom_mm, options.min_bottom_mm}.max
+    end
+
     private def self.source_width_mm(source : String) : Float64?
       match = File.read(source).match(/\bwidth\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*mm\b/)
       match ? match[1].to_f64 : nil
     end
 
     private def self.mm_to_px(value : Float64, ppi : Int32) : Int32
+      return 0 if value == 0.0
+
       {1, (value / 25.4 * ppi).round.to_i}.max
     end
 

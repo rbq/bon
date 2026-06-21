@@ -10,7 +10,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Use generated mise bin stubs when available.
 - Run `mise generate task-stubs` whenever mise task names are added, removed, or renamed.
 - Required and optional development tools are pinned in `.mise.toml`: Crystal `1.20.2`, TinyTeX `2026.06`, and Typst `0.14.2`.
-- Main development commands are `mise run spec`, `mise run build`, and `mise run run -- --dry-run <file>`.
+- Main development commands are `mise run spec`, `mise run build`, `mise run run -- --dry-run <file>`, and local `bon --dry-run <file>` through the generated mise stub.
 - Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason.
 
 ## Workflow Guidance
@@ -30,8 +30,8 @@ mise install
 mise run spec
 mise run build
 mise run run -- printer list
-mise run run -- --dry-run examples/spec/receipt-80mm.typ
-bin/bon --dry-run examples/spec/receipt-80mm.typ
+mise run run -- --dry-run spec/fixtures/examples/receipt-80mm.typ
+bon --dry-run spec/fixtures/examples/receipt-80mm.typ
 ```
 
 ## Keeping Things in Sync
@@ -42,7 +42,7 @@ When modifying the application, keep all of the following in sync:
 - **AGENTS.md** — record new architecture decisions and significant implementation constraints in the Implementation Notes section so future agents have accurate context.
 - **Help output** — every command and subcommand must produce useful `--help` output. Check that the banner, subcommand list, and option descriptions in `cli.cr` match what is documented in `README.md`.
 - **Specs** — new features and behavior changes must be covered by specs. Prefer unit tests that exercise the changed module directly, and integration-level CLI specs for end-to-end command behavior. Run `mise run spec` and ensure all examples pass before finishing.
-- **Examples** — keep `examples/spec/` inputs and `examples/spec/README.md` aligned with supported code paths and project scope. Add, replace, or retire repository-local example fixtures when input formats, conversion paths, width/height policies, simulation behavior, or other representative workflows change.
+- **Examples** — keep `spec/fixtures/examples/` inputs and `spec/fixtures/examples/README.md` aligned with supported code paths and project scope. Add, replace, or retire repository-local example fixtures when input formats, conversion paths, width/height policies, simulation behavior, or other representative workflows change.
 - **Config schema** — if a config key is added, renamed, or removed, update `Config#overlay`, `Config#validate!`, `Config#build_toml`, the `README.md` config example, and any related specs together.
 - **Document support matrix** — if a supported input type is added or dropped, update `Document::SUPPORTED_SUFFIXES`, `README.md` (Requirements, CLI, and Print Pipeline sections), `AGENTS.md` Workflow Guidance, related specs, and repository-local examples.
 
@@ -57,9 +57,11 @@ When modifying the application, keep all of the following in sync:
 - `printer.candidates` is deprecated, ignored during config overlay, and emitted as a CLI warning when present.
 - Printer-specific overrides are stored under `[printer.<queue>.paper]`, `[printer.<queue>.render]` for `image_ppi`, and `[printer.<queue>.cups.options]`; they are applied only after CUPS queue discovery for printing.
 - The local TOML parser intentionally supports only the subset needed by the config schema: tables, dotted tables, strings, booleans, integers, floats, and string arrays.
+- The CLI version printed by `bon -v` and `bon --version` is embedded at compile time from `shard.yml`; tag releases must use `v<shard.yml version>` and CI verifies the match before publishing GitHub releases.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
 - Print stdin uses `-` as a source marker, materializes the stream into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
+- `bon print margins` and `bon simulate margins` both materialize the embedded `src/bon/assets/margins.typ` asset as a temporary `margins.typ`; keep that asset self-contained, defaulting to 80 mm x 80 mm pages, with one 10 mm margin page and one near-edge top/bottom margin page suitable for print and simulation calibration.
 - `--stdin-as=pdf|png|jpg|jpeg|typ|tex` explicitly sets the stdin type; omitted stdin type auto-detects only PDF, PNG, and JPEG binary signatures.
 - Typst and LaTeX stdin require explicit `--stdin-as` and are compiled from the temporary directory, so project-relative local assets are not available unless the piped source is self-contained.
 - Config `[cups]` is reserved for bon-controlled CUPS behavior such as `copies` and `dry_run`; arbitrary CUPS/driver options live under `[cups.options]` and are passed as `lp -o` values. Empty `[cups.options]` string values remove inherited/default options.
@@ -70,12 +72,13 @@ When modifying the application, keep all of the following in sync:
 - Image inputs use `render.image_ppi` to determine physical size and are sent directly to CUPS when no center-crop is needed.
 - Image inputs that need center-cropping fall back to a temporary Typst wrapper PDF and Ghostscript crop.
 - Simulation supports Typst and PNG/JPEG inputs; PNGs are read directly and JPEGs are rasterized through a temporary Typst wrapper.
-- Simulation uses configured physical paper width, automatic/configured printable width, crop policy, `render.image_ppi`, and `[simulate] background_tint` when generating mockups.
+- Simulation uses configured physical paper width, automatic/configured printable width, crop policy, `render.image_ppi`, and `[simulate]` top/bottom paper margins, background tint, foreground color, and foreground fade when generating mockups.
+- Default simulation vertical paper margins remain 10 mm before content and 14 mm after content, while separate technical minimum margins clamp mockups to at least 12 mm before content and 2 mm after content. Keep these configurable rather than changing actual print output.
 - Simulated mockups default to foreground color `#232320` and foreground fade `1.0`; keep those defaults to preserve the established mockup look.
 - LaTeX `auto` mode tries `latexmk -pdf`, then `tectonic`, then `pdflatex`.
 - Width policy: pages wider than physical paper width fail; pages wider than printable width are center-cropped with Ghostscript unless `--no-crop` is set.
 - Default PDF/Typst/LaTeX crops use Ghostscript `pdfwrite` and remain PDF; the Typst raster/downsample path is only for `render.typst_mode = "raster"`.
 - `render.raster_threshold` and `render.raster_dither` affect only bon-generated 1-bit raster/downsample output, not direct CUPS pass-through or PDF-first `pdfwrite` crops.
 - Height policy: pages taller than `paper.max_media_height_pt` fail instead of being clamped to CUPS media height.
-- Repository-local example inputs live in `examples/spec/` and cover supported suffixes, 58 mm and 80 mm widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths. Use these for smoke tests instead of external files.
+- Repository-local example inputs live in `spec/fixtures/examples/` and cover supported suffixes, 58 mm and 80 mm widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths. Use these for smoke tests instead of external files.
 - Thermal printers commonly have a non-printable horizontal margin. bon models this with `paper.printable_width_pt`; the automatic defaults map 80 mm paper to 576 dots at 203 dpi (~72.08 mm printable, ~4 mm cropped from each side) and 58 mm paper to 384 dots (~48.05 mm printable, ~5 mm cropped from each side). Cropping is a last-mile centering step for over-wide pages, not a layout substitute; examples and fixtures should keep meaningful content inside the printable width with margins of at least 4 mm for 80 mm paper and 5 mm for 58 mm paper unless they are explicitly testing crop behavior.

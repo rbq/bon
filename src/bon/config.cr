@@ -220,6 +220,10 @@ module Bon
         io << "# latex_engine = \"#{toml_escape(defaults.latex_engine)}\"\n\n"
 
         io << "[simulate]\n"
+        io << "# top_mm = #{defaults.simulate_top_mm}\n"
+        io << "# bottom_mm = #{defaults.simulate_bottom_mm}\n"
+        io << "# min_top_mm = #{defaults.simulate_min_top_mm}\n"
+        io << "# min_bottom_mm = #{defaults.simulate_min_bottom_mm}\n"
         io << "# background_tint = \"#{toml_escape(defaults.simulate_background_tint)}\"\n"
         io << "# foreground_color = \"#{toml_escape(defaults.simulate_foreground_color)}\"\n"
         io << "# foreground_fade = #{defaults.simulate_foreground_fade}\n\n"
@@ -290,6 +294,10 @@ module Bon
     property cups_copies : Int32
     property cups_dry_run : Bool
     property cups_options : Hash(String, String)
+    property simulate_top_mm : Float64
+    property simulate_bottom_mm : Float64
+    property simulate_min_top_mm : Float64
+    property simulate_min_bottom_mm : Float64
     property simulate_background_tint : String
     property simulate_foreground_color : String
     property simulate_foreground_fade : Float64
@@ -311,8 +319,12 @@ module Bon
                    @cups_options = {
                      "Resolution"        => "203x203dpi",
                      "TmxPaperCut"       => "CutPerPage",
-                     "TmxPaperReduction" => "Off",
+                      "TmxPaperReduction" => "Top",
                    },
+                    @simulate_top_mm = 10.0,
+                    @simulate_bottom_mm = 14.0,
+                    @simulate_min_top_mm = 12.0,
+                    @simulate_min_bottom_mm = 2.0,
                    @simulate_background_tint = "#f5f1e0",
                    @simulate_foreground_color = "#232320",
                     @simulate_foreground_fade = 1.0)
@@ -449,6 +461,10 @@ module Bon
         io << "latex_engine = \"#{toml_escape(@latex_engine)}\"\n\n"
 
         io << "[simulate]\n"
+        io << "top_mm = #{@simulate_top_mm}\n"
+        io << "bottom_mm = #{@simulate_bottom_mm}\n"
+        io << "min_top_mm = #{@simulate_min_top_mm}\n"
+        io << "min_bottom_mm = #{@simulate_min_bottom_mm}\n"
         io << "background_tint = \"#{toml_escape(@simulate_background_tint)}\"\n"
         io << "foreground_color = \"#{toml_escape(@simulate_foreground_color)}\"\n"
         io << "foreground_fade = #{@simulate_foreground_fade}\n\n"
@@ -505,6 +521,14 @@ module Bon
           @raster_dither = expect_string(key, value, source)
         when "render.latex_engine"
           @latex_engine = expect_string(key, value, source)
+        when "simulate.top_mm"
+          @simulate_top_mm = expect_number(key, value, source)
+        when "simulate.bottom_mm"
+          @simulate_bottom_mm = expect_number(key, value, source)
+        when "simulate.min_top_mm"
+          @simulate_min_top_mm = expect_number(key, value, source)
+        when "simulate.min_bottom_mm"
+          @simulate_min_bottom_mm = expect_number(key, value, source)
         when "simulate.background_tint"
           @simulate_background_tint = expect_string(key, value, source)
         when "simulate.foreground_color"
@@ -550,6 +574,11 @@ module Bon
       validate_finite!("render.raster_threshold", @raster_threshold)
       raise Error.new("render.raster_threshold must be between 0.0 and 1.0") unless @raster_threshold >= 0.0 && @raster_threshold <= 1.0
       raise Error.new("render.raster_dither must be either \"none\" or \"ordered\"") unless {"none", "ordered"}.includes?(@raster_dither)
+      validate_finite!("simulate.top_mm", @simulate_top_mm)
+      validate_finite!("simulate.bottom_mm", @simulate_bottom_mm)
+      validate_finite!("simulate.min_top_mm", @simulate_min_top_mm)
+      validate_finite!("simulate.min_bottom_mm", @simulate_min_bottom_mm)
+      raise Error.new("simulate.top_mm, simulate.bottom_mm, simulate.min_top_mm, and simulate.min_bottom_mm cannot be negative") if @simulate_top_mm < 0 || @simulate_bottom_mm < 0 || @simulate_min_top_mm < 0 || @simulate_min_bottom_mm < 0
       raise Error.new("simulate.background_tint must be a hex RGB color like #f5f1e0") unless hex_rgb?(@simulate_background_tint)
       raise Error.new("simulate.foreground_color must be a hex RGB value like #232320") unless hex_rgb?(@simulate_foreground_color)
       raise Error.new("simulate.foreground_fade must be between 0.0 and 1.0") unless @simulate_foreground_fade >= 0.0 && @simulate_foreground_fade <= 1.0

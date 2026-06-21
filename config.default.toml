@@ -20,6 +20,10 @@
 # latex_engine = "auto"
 
 [simulate]
+# top_mm = 10.0
+# bottom_mm = 14.0
+# min_top_mm = 12.0
+# min_bottom_mm = 2.0
 # background_tint = "#f5f1e0"
 # foreground_color = "#232320"
 # foreground_fade = 1.0
@@ -31,7 +35,7 @@
 [cups.options]
 # Resolution = "203x203dpi"
 # TmxPaperCut = "CutPerPage"
-# TmxPaperReduction = "Off"
+# TmxPaperReduction = "Top"
 
 # Optional printer-scoped hardware overrides. Quote queue names containing dots.
 # [printer.EPSON_TM_m30III.paper]

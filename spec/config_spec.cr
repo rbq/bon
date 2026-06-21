@@ -47,6 +47,10 @@ describe Bon::Config do
       raster_dither = "ordered"
 
       [simulate]
+      top_mm = 3.0
+      bottom_mm = 5.0
+      min_top_mm = 2.0
+      min_bottom_mm = 1.0
       background_tint = "c8d0ff"
       foreground_color = "#112233"
       foreground_fade = 0.5
@@ -61,6 +65,10 @@ describe Bon::Config do
     config.raster_ppi_multiplier.should eq(3)
     config.raster_threshold.should eq(0.5)
     config.raster_dither.should eq("ordered")
+    config.simulate_top_mm.should eq(3.0)
+    config.simulate_bottom_mm.should eq(5.0)
+    config.simulate_min_top_mm.should eq(2.0)
+    config.simulate_min_bottom_mm.should eq(1.0)
     config.simulate_background_tint.should eq("c8d0ff")
     config.simulate_foreground_color.should eq("#112233")
     config.simulate_foreground_fade.should eq(0.5)
@@ -92,6 +100,16 @@ describe Bon::Config do
   it "includes the simulation background tint in generated TOML defaults" do
     Bon::Config.default_toml.should contain("[simulate]")
     Bon::Config.default_toml.should contain("# background_tint = \"#f5f1e0\"")
+  end
+
+  it "includes simulation vertical margin defaults in generated TOML defaults" do
+    defaults = Bon::Config.default_toml
+
+    defaults.should contain("[simulate]")
+    defaults.should contain("# top_mm = 10.0")
+    defaults.should contain("# bottom_mm = 14.0")
+    defaults.should contain("# min_top_mm = 12.0")
+    defaults.should contain("# min_bottom_mm = 2.0")
   end
 
   it "includes simulate foreground defaults in generated TOML defaults" do
@@ -236,6 +254,20 @@ describe Bon::Config do
 
     expect_raises(Bon::Error, /simulate.foreground_fade/) do
       Bon::Config.new(simulate_foreground_fade: 1.1).validate!
+    end
+  end
+
+  it "rejects invalid simulate vertical margins" do
+    expect_raises(Bon::Error, /simulate\.top_mm/) do
+      Bon::Config.new(simulate_top_mm: -0.1).validate!
+    end
+
+    expect_raises(Bon::Error, /simulate\.top_mm/) do
+      Bon::Config.new(simulate_top_mm: Float64::INFINITY).validate!
+    end
+
+    expect_raises(Bon::Error, /simulate\.min_bottom_mm/) do
+      Bon::Config.new(simulate_min_bottom_mm: Float64::INFINITY).validate!
     end
   end
 

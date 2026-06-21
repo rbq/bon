@@ -35,20 +35,20 @@ mise run run -- printer list
 Dry-run a Typst receipt without submitting an `lp` job:
 
 ```sh
-mise run run -- --dry-run examples/spec/receipt-80mm.typ
+mise run run -- --dry-run spec/fixtures/examples/receipt-80mm.typ
 ```
 
 Print one or more files:
 
 ```sh
-mise run run -- examples/spec/variable-pages.pdf examples/spec/receipt.png examples/spec/receipt-80mm.typ examples/spec/receipt.tex
+mise run run -- spec/fixtures/examples/variable-pages.pdf spec/fixtures/examples/receipt.png spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex
 ```
 
 Print one document from stdin. Binary PDF, PNG, and JPEG input is auto-detected; Typst and LaTeX stdin must be typed explicitly:
 
 ```sh
-cat examples/spec/variable-pages.pdf | mise run run -- --dry-run -
-cat examples/spec/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
+cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
 ```
 
 Validate and inspect configuration:
@@ -62,22 +62,25 @@ mise run run -- config edit
 Render a receipt mockup:
 
 ```sh
-mise run run -- simulate examples/spec/receipt-80mm.typ examples/spec/receipt.png
-mise run run -- sim examples/spec/receipt.jpg
+mise run run -- simulate spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.png
+mise run run -- sim spec/fixtures/examples/receipt.jpg
 ```
 
-Build the executable and run it directly:
+Build the production executable:
 
 ```sh
 mise run build
-bin/bon --dry-run examples/spec/receipt-80mm.typ
 ```
+
+Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` copies that executable to `$HOME/.local/bin/bon`.
 
 ## CLI
 
 ```text
 Usage: bon [print] [options] FILE...|-
+       bon print margins [options]
        bon simulate [options] [FILE...]
+       bon simulate margins [options]
        bon sim [options] [FILE...]
        bon printer [list]
        bon config <check|show|edit>
@@ -87,7 +90,9 @@ Usage: bon [print] [options] FILE...|-
 Commands:
 
 - `print [options] FILE...|-` - print one or more files, or one supported document from stdin with `-`. This is the default command, so `bon FILE...` also works.
+- `print margins [options]` - print the built-in 80 mm x 80 mm two-page margin calibration sheet embedded from `src/bon/assets/margins.typ`.
 - `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
+- `simulate margins [options]` - render the same built-in margin calibration sheet into the current directory unless `--out-dir` is set.
 - `sim [options] [FILE...]` - short alias for `simulate`.
 - `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
 - `config check` - validate used config files and show source status.
@@ -105,10 +110,10 @@ Print options:
 - `--stdin-as TYPE` - type for stdin input: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
 - `--no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
-- `--version` - show the CLI version.
+- `-v, --version` - show the CLI version from `shard.yml`.
 - `--help` - show usage help.
 
-If no files are passed to the print command, `bon` fails with usage help. Use `-` to read a single print input from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. Piped Typst files are materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained.
+If no files are passed to the print command, `bon` fails with usage help. Use `-` to read a single print input from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. Piped Typst files are materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
 
 Simulate options:
 
@@ -170,6 +175,10 @@ Example generated config. Uncomment settings to override the built-in defaults:
 # latex_engine = "auto"
 
 [simulate]
+# top_mm = 10.0
+# bottom_mm = 14.0
+# min_top_mm = 12.0
+# min_bottom_mm = 2.0
 # background_tint = "#f5f1e0"
 # foreground_color = "#232320"
 # foreground_fade = 1.0
@@ -181,7 +190,7 @@ Example generated config. Uncomment settings to override the built-in defaults:
 [cups.options]
 # Resolution = "203x203dpi"
 # TmxPaperCut = "CutPerPage"
-# TmxPaperReduction = "Off"
+# TmxPaperReduction = "Top"
 
 # Optional printer-scoped hardware overrides. Quote queue names containing dots.
 # [printer.EPSON_TM_m30III.paper]
@@ -202,7 +211,7 @@ Printer-scoped overrides apply only after a print queue has been selected. Suppo
 
 `bon init` is safe to rerun. Without `--force`, it preserves comments, ordering, and unrelated settings, updates only `[printer] name`, and removes obsolete `[printer] candidates`. With `--force`, it regenerates from the default template. Non-interactive mode keeps an existing selected printer only if it is a usable thermal CUPS queue; otherwise it selects the first usable thermal queue, or leaves `printer.name` unset with a warning if none is found.
 
-`render.typst_mode` is `pdf` by default, keeping Typst/LaTeX crop output as PDF; `raster` uses the Ghostscript raster/downsample path for Typst inputs that need cropping. Raster controls affect bon-generated raster/downsample paths, not direct CUPS pass-through files or PDF-first `pdfwrite` crops. Simulation color and foreground settings live under `[simulate]`.
+`render.typst_mode` is `pdf` by default, keeping Typst/LaTeX crop output as PDF; `raster` uses the Ghostscript raster/downsample path for Typst inputs that need cropping. Raster controls affect bon-generated raster/downsample paths, not direct CUPS pass-through files or PDF-first `pdfwrite` crops. Simulation vertical paper margins, color, and foreground settings live under `[simulate]`. The default simulated paper margins are `top_mm = 10.0` and `bottom_mm = 14.0`; the printer's technical minimum non-printable feed is modeled separately with `min_top_mm = 12.0` and `min_bottom_mm = 2.0`, so smaller configured margins are clamped in generated mockups.
 
 ## Print Pipeline
 
@@ -220,11 +229,11 @@ For each input, `bon`:
 10. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
 11. Runs `lp` with the configured queue, copies, options, and final page path.
 
-`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags.
+`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The paper shown before and after the content comes from `[simulate] top_mm` / `[simulate] bottom_mm` or `--top-mm` / `--bottom-mm`, clamped by `[simulate] min_top_mm` / `[simulate] min_bottom_mm` to reflect the printer's physical minimum margins. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags. Multi-page Typst simulations write one mockup per page, for example `margins-page-001_<paper>mm-printout.<format>` and `margins-page-002_<paper>mm-printout.<format>` for `bon simulate margins`.
 
 ## Development
 
-Repository-local example inputs live in `examples/spec/`. They accompany the specs and cover supported input suffixes, 58 mm and 80 mm paper widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths.
+Repository-local example inputs live in `spec/fixtures/examples/`. They accompany the specs and cover supported input suffixes, 58 mm and 80 mm paper widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths.
 
 Run specs:
 
