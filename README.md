@@ -51,6 +51,13 @@ cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
 cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
 ```
 
+Print paths from stdin, one path per line. Stdin paths can be combined with normal CLI file arguments:
+
+```sh
+printf '%s\n' spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex | mise run run -- --dry-run -
+printf '%s\n' spec/fixtures/examples/receipt.tex | mise run run -- --dry-run spec/fixtures/examples/variable-pages.pdf -
+```
+
 Validate and inspect configuration:
 
 ```sh
@@ -89,7 +96,7 @@ Usage: bon [print] [options] FILE...|-
 
 Commands:
 
-- `print [options] FILE...|-` - print one or more files, or one supported document from stdin with `-`. This is the default command, so `bon FILE...` also works.
+- `print [options] FILE...|-` - print one or more files, one supported document from stdin, or newline-delimited paths from stdin with `-`. This is the default command, so `bon FILE...` also works.
 - `print margins [options]` - print the built-in 80 mm x 80 mm two-page margin calibration sheet embedded from `src/bon/assets/margins.typ`.
 - `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
 - `simulate margins [options]` - render the same built-in margin calibration sheet into the current directory unless `--out-dir` is set.
@@ -107,13 +114,13 @@ Print options:
 - `-o, --option KEY=VALUE` - add or override a CUPS option; repeatable.
 - `--paper-mm N` - physical paper width in millimeters.
 - `--printable-width-pt N` - printable width in points.
-- `--stdin-as TYPE` - type for stdin input: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
+- `--stdin-as TYPE` - type for stdin document data: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
 - `--no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
 - `-v, --version` - show the CLI version from `shard.yml`.
 - `--help` - show usage help.
 
-If no files are passed to the print command, `bon` fails with usage help. Use `-` to read a single print input from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. Piped Typst files are materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
+If no files are passed to the print command, `bon` fails with usage help. Use `-` to read from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. When stdin is not typed and is not detected as binary document data, `bon` treats it as newline-delimited file paths if every non-empty line names an existing path. Stdin path lists are expanded in place, so they can be combined with normal CLI file arguments. Piped Typst document data is materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained; piped Typst paths keep their original location and asset access. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
 
 Simulate options:
 
@@ -218,7 +225,7 @@ Printer-scoped overrides apply only after a print queue has been selected. Suppo
 For each input, `bon`:
 
 1. Creates a temporary working directory outside the project tree.
-2. Resolves and validates path inputs, or materializes stdin `-` into a typed temporary file before validation.
+2. Resolves and validates path inputs, expands stdin `-` into newline-delimited paths when applicable, or materializes stdin document data into a typed temporary file before validation.
 3. Converts Typst and LaTeX inputs to PDF.
 4. Sends PNG/JPEG inputs directly to CUPS when they fit the printable width, based on `render.image_ppi`.
 5. Scans discoverable PDF `/CropBox` and `/MediaBox` entries on a best-effort basis, or computes image physical size from pixels and PPI. This is not a full PDF parser, so compressed/object-stream page boxes may not be visible.

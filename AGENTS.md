@@ -20,7 +20,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Preserve the executable name `bon`.
 - Preserve default receipt behavior for 80 mm paper and 203 dpi printer options.
 - Keep destination input support for `.pdf`, `.png`, `.jpg`, `.jpeg`, `.typ`, and `.tex`.
-- Supported print inputs may be provided as filesystem paths or as one stdin stream via `-`.
+- Supported print inputs may be provided as filesystem paths, as a newline-delimited stdin path list via `-`, or as one stdin document stream via `-`.
 - Do not add interactive file selection unless explicitly requested.
 
 ## Commands
@@ -78,9 +78,10 @@ When modifying the application, keep all of the following in sync:
 - Changelog generation does not assume Conventional Commits. Keep `cliff.toml` configured for a flat commit list unless the project explicitly adopts commit classification.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
-- Print stdin uses `-` as a source marker, materializes the stream into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
+- Print stdin uses `-` as a source marker. If `--stdin-as` is omitted and binary document detection fails, stdin is treated as a newline-delimited path list only when every non-empty line exists; those paths are expanded in place alongside CLI file arguments.
+- Stdin document data materializes into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
 - `bon print margins` and `bon simulate margins` both materialize the embedded `src/bon/assets/margins.typ` asset as a temporary `margins.typ`; keep that asset self-contained, defaulting to 80 mm x 80 mm pages, with one 10 mm margin page and one near-edge top/bottom margin page suitable for print and simulation calibration.
-- `--stdin-as=pdf|png|jpg|jpeg|typ|tex` explicitly sets the stdin type; omitted stdin type auto-detects only PDF, PNG, and JPEG binary signatures.
+- `--stdin-as=pdf|png|jpg|jpeg|typ|tex` explicitly sets stdin document-data type and disables path-list detection; omitted stdin type auto-detects PDF, PNG, and JPEG binary signatures before trying path-list detection.
 - Typst and LaTeX stdin require explicit `--stdin-as` and are compiled from the temporary directory, so project-relative local assets are not available unless the piped source is self-contained.
 - Config `[cups]` is reserved for bon-controlled CUPS behavior such as `copies` and `dry_run`; arbitrary CUPS/driver options live under `[cups.options]` and are passed as `lp -o` values. Empty `[cups.options]` string values remove inherited/default options.
 - PDF inputs pass through unchanged before width handling.

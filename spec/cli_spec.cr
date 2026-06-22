@@ -488,6 +488,60 @@ describe Bon::Cli do
     end
   end
 
+  it "dry-runs a single path piped through stdin" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "receipt.pdf")
+      File.write(source, "%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 120]>> endobj\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("#{source}\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", "-"], stdout, stderr, stdin)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("lp -d EPSON_TM_m30III -n 1")
+        output.should contain("-o media=Custom.100x120")
+        output.should contain(source)
+        output.should_not contain("stdin.pdf")
+      end
+    end
+  end
+
+  it "dry-runs multiple paths piped through stdin with CLI path arguments" do
+    with_cli_temp_dir do |dir|
+      first = File.join(dir, "first.pdf")
+      second = File.join(dir, "second.pdf")
+      third = File.join(dir, "third.pdf")
+      File.write(first, "%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 120]>> endobj\n")
+      File.write(second, "%PDF-1.7\n1 0 obj <</MediaBox [0 0 120 140]>> endobj\n")
+      File.write(third, "%PDF-1.7\n1 0 obj <</MediaBox [0 0 140 160]>> endobj\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      stdin = IO::Memory.new("#{second}\n\n#{third}\n")
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["--dry-run", first, "-"], stdout, stderr, stdin)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("-o media=Custom.100x120")
+        output.should contain("-o media=Custom.120x140")
+        output.should contain("-o media=Custom.140x160")
+        output.should contain(first)
+        output.should contain(second)
+        output.should contain(third)
+      end
+    end
+  end
+
   it "dry-runs Typst stdin when explicitly typed" do
     with_cli_temp_dir do |dir|
       install_fake_lpstat(dir)
@@ -569,7 +623,7 @@ describe Bon::Cli do
 
         status.should eq(2)
         stdout.to_s.should eq("")
-        stderr.to_s.should contain("error: Could not detect stdin input type; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex")
+        stderr.to_s.should contain("error: Could not detect stdin input type or path list; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex for document content")
       end
     end
   end

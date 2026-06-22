@@ -99,7 +99,7 @@ module Bon
       if margins_command
         with_margins_typ_source { |source| print_documents([source], queue.name, config) }
       else
-        print_documents(@files, queue.name, config)
+            print_documents(@files, queue.name, config)
       end
       0
     end
@@ -126,7 +126,7 @@ module Bon
                  bon init [options]
 
           Commands:
-            print      Print one or more files. This is the default command.
+            print      Print files, stdin document data, or stdin path lists. This is the default command.
             margins    Print the built-in 10 mm margin calibration sheet.
             simulate   Render receipt mockups for Typst and image inputs.
             sim        Alias for simulate.
@@ -148,7 +148,7 @@ module Bon
         parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = parse_float(value, "--printable-width-pt") }
         parser.on("--raster-threshold=N", "Raster darkness cutoff from 0.0 to 1.0") { |value| config.raster_threshold = parse_float(value, "--raster-threshold") }
         parser.on("--raster-dither=MODE", "Raster dithering: none or ordered") { |value| config.raster_dither = value }
-        parser.on("--stdin-as=TYPE", "Type for stdin input: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
+        parser.on("--stdin-as=TYPE", "Type for stdin document data: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
         parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
         parser.on("-v", "--version", "Show version") { @show_version = true }
@@ -575,14 +575,17 @@ module Bon
       end
 
       with_temp_dir("bon-cups-") do |temp_dir|
-        files.each_with_index(1) do |source, index|
-          resolved_source = materialize_stdin_source(source, temp_dir, index)
-          document = Document.prepare(resolved_source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
-          document.pages.each do |page|
-            options = Cups.build_options(config, page.size, @cli_options)
-            Cups.validate_against!(printer, options, supported) if supported
-            command = Cups.lp_command(printer, config.cups_copies, options, page.path)
-            Command.run(command, "CUPS printing failed for #{source}", config.cups_dry_run, false, @output_io, @error_io)
+        index = 0
+        files.each do |source|
+          expand_print_source(source, temp_dir).each do |resolved_source|
+            index += 1
+            document = Document.prepare(resolved_source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
+            document.pages.each do |page|
+              options = Cups.build_options(config, page.size, @cli_options)
+              Cups.validate_against!(printer, options, supported) if supported
+              command = Cups.lp_command(printer, config.cups_copies, options, page.path)
+              Command.run(command, "CUPS printing failed for #{source}", config.cups_dry_run, false, @output_io, @error_io)
+            end
           end
         end
       end
@@ -605,20 +608,33 @@ module Bon
       raise Error.new("stdin input can only be used once") if stdin_count > 1
     end
 
-    private def materialize_stdin_source(source : String, temp_dir : String, index : Int32) : String
-      return source unless source == "-"
+    private def expand_print_source(source : String, temp_dir : String) : Array(String)
+      return [source] unless source == "-"
 
       content = @input_io.gets_to_end
       raise Error.new("stdin input is empty") if content.empty?
 
       ext = @stdin_as || detect_stdin_type(content.to_slice)
       unless ext
-        raise Error.new("Could not detect stdin input type; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex")
+        paths = detect_stdin_paths(content)
+        return paths if paths
+      end
+
+      unless ext
+        raise Error.new("Could not detect stdin input type or path list; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex for document content")
       end
 
       path = File.join(temp_dir, "stdin#{ext}")
       File.write(path, content)
-      path
+      [path]
+    end
+
+    private def detect_stdin_paths(content : String) : Array(String)?
+      paths = content.lines.map(&.strip).reject(&.empty?)
+      return nil if paths.empty?
+      return nil unless paths.all? { |path| File.exists?(path) }
+
+      paths
     end
 
     private def detect_stdin_type(bytes : Bytes) : String?
