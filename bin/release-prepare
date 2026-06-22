@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+repo_root="$(cd "$script_dir/.." >/dev/null && pwd)"
+cd "$repo_root"
+
+version="${1:-}"
+if [[ -z "$version" ]]; then
+  echo "usage: bin/release-prepare <version>" >&2
+  exit 2
+fi
+version="${version#v}"
+
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+  echo "error: version must look like 1.2.3 or 1.2.3-rc.1" >&2
+  exit 2
+fi
+
+if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+  echo "error: tag v$version already exists" >&2
+  exit 2
+fi
+
+if [[ "${ALLOW_DIRTY:-}" != "1" && -n "$(git status --porcelain)" ]]; then
+  echo "error: working tree is not clean; commit or stash first, or set ALLOW_DIRTY=1" >&2
+  exit 2
+fi
+
+BON_RELEASE_VERSION="$version" mise exec -- crystal eval '
+version = ENV["BON_RELEASE_VERSION"]
+path = "shard.yml"
+text = File.read(path)
+unless text.match(/^version:\s*\S+\s*$/m)
+  abort "error: could not find version in shard.yml"
+end
+File.write(path, text.sub(/^version:\s*\S+\s*$/m, "version: #{version}"))
+'
+
+bin/release-notes "$version"
+
+cat <<TEXT
+
+Prepared v$version.
+
+Next steps:
+1. Edit CHANGELOG.md into user-facing release notes.
+2. Run: bin/release-check
+3. Commit shard.yml and CHANGELOG.md.
+4. After the release commit is on main, run: bin/release-tag $version
+TEXT

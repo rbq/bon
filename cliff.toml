@@ -1,0 +1,27 @@
+[changelog]
+header = """
+# Changelog
+
+Release notes are intentionally curated manually. `bin/release-notes <version>` prepends a flat commit list generated from Git history; rewrite that section into user-facing notes before tagging.
+
+"""
+body = """
+## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+
+{% if commits | length == 0 %}\
+- No user-facing changes recorded.
+{% else %}\
+{% for commit in commits %}\
+- {{ commit.message | split(pat="\n") | first | trim }} ({{ commit.id | truncate(length=7, end="") }})
+{% endfor %}\
+{% endif %}
+
+"""
+trim = true
+
+[git]
+conventional_commits = false
+filter_unconventional = false
+filter_commits = false
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

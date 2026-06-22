@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+repo_root="$(cd "$script_dir/.." >/dev/null && pwd)"
+cd "$repo_root"
+
+version="${1:-}"
+if [[ -z "$version" ]]; then
+  version="$(bin/release-version)"
+fi
+version="${version#v}"
+
+mise exec -- git-cliff --unreleased --tag "$version" --prepend CHANGELOG.md
+
+cat <<TEXT
+Updated CHANGELOG.md for $version.
+
+Review the generated section before tagging. Commits are listed without
+automatic classification because this project does not require Conventional
+Commits.
+TEXT

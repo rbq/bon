@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+repo_root="$(cd "$script_dir/.." >/dev/null && pwd)"
+cd "$repo_root"
+
+version="${1:-}"
+if [[ -z "$version" ]]; then
+  version="$(bin/release-version)"
+fi
+version="${version#v}"
+tag="v$version"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "error: working tree is not clean; commit the release first" >&2
+  exit 2
+fi
+
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  echo "error: tag $tag already exists" >&2
+  exit 2
+fi
+
+bin/release-check
+git tag -a "$tag" -m "Release $tag"
+
+cat <<TEXT
+Created annotated tag $tag.
+
+Push it to publish the GitHub release:
+  git push origin $tag
+TEXT

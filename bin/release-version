@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+repo_root="$(cd "$script_dir/.." >/dev/null && pwd)"
+cd "$repo_root"
+
+mise exec -- crystal eval 'require "yaml"; puts YAML.parse(File.read("shard.yml"))["version"].as_s'
