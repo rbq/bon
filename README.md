@@ -53,14 +53,14 @@ List CUPS queues and select one explicitly when printing. To make a queue the de
 
 ```sh
 bon printer list
-bon --printer EPSON_TM_m30III receipt.pdf
+bon -p EPSON_TM_m30III receipt.pdf
 ```
 
 Render a mockup before printing. Simulation supports Typst, PNG, and JPEG inputs:
 
 ```sh
 bon simulate receipt.typ
-bon simulate --paper-mm 58 --out-dir preview receipt.png
+bon simulate --width 58 --out-dir preview receipt.png
 ```
 
 Print one or more files. Supported print inputs are PDF, PNG, JPEG, Typst, and LaTeX:
@@ -80,7 +80,7 @@ Print one document from stdin. Binary PDF, PNG, and JPEG input is auto-detected;
 
 ```sh
 cat receipt.pdf | bon --dry-run -
-cat receipt.typ | bon --dry-run --stdin-as typ -
+cat receipt.typ | bon --dry-run --stdin-format typ -
 ```
 
 Print paths from stdin, one path per line. Stdin paths can be combined with normal CLI file arguments:
@@ -97,44 +97,44 @@ Usage: bon [print] [options] FILE...|-
        bon print margins [options]
        bon simulate [options] [FILE...]
        bon simulate margins [options]
-       bon sim [options] [FILE...]
+       bon sim|s [options] [FILE...]
        bon printer [list]
-       bon config <check|show|edit>
-       bon init [options]
+       bon config|c <check|show|edit>
+       bon init|i [options]
 ```
 
 Commands:
 
-- `print [options] FILE...|-` - print one or more files, one supported document from stdin, or newline-delimited paths from stdin with `-`. This is the default command, so `bon FILE...` also works.
+- `print [options] FILE...|-` - print one or more files, one supported document from stdin, or newline-delimited paths from stdin with `-`. This is the default command, so `bon FILE...` also works. `p` is a short alias.
 - `print margins [options]` - print the built-in 80 mm x 80 mm two-page margin calibration sheet embedded from `src/bon/assets/margins.typ`.
 - `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
 - `simulate margins [options]` - render the same built-in margin calibration sheet into the current directory unless `--out-dir` is set.
-- `sim [options] [FILE...]` - short alias for `simulate`.
+- `sim [options] [FILE...]` and `s [options] [FILE...]` - short aliases for `simulate`.
 - `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
-- `config check` - validate used config files and show source status.
+- `config check` - validate used config files and show source status. `c` is a short alias for `config`.
 - `config show` - show the effective merged config, including built-in defaults.
 - `config edit` - open the local or global config in `$VISUAL`, `$EDITOR`, or `vi`, then validate it.
-- `init` - create or refresh a config file from printer discovery.
+- `init` - create or refresh a config file from printer discovery. `i` is a short alias.
 
 Print options:
 
-- `-d, --printer NAME` - use a specific CUPS queue.
+- `-p, --printer NAME` - use a specific CUPS queue.
 - `-n, --copies N` - number of copies.
-- `-o, --option KEY=VALUE` - add or override a CUPS option; repeatable.
-- `--paper-mm N` - physical paper width in millimeters.
+- `-c, --cups KEY=VALUE` - add or override a CUPS option; repeatable.
+- `-w, --width N` - physical paper width in millimeters.
 - `--printable-width-pt N` - printable width in points.
-- `--stdin-as TYPE` - type for stdin document data: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
-- `--no-crop` - do not center-crop pages wider than printable width.
+- `-f, --stdin-format TYPE` - type for stdin document data: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
+- `-u, --no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
 - `-v, --version` - show the CLI version from `shard.yml`.
-- `--help` - show usage help.
+- `-h, --help` - show usage help.
 
-If no files are passed to the print command, `bon` fails with usage help. Use `-` to read from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-as typ` or `--stdin-as tex` for Typst or LaTeX text stdin. When stdin is not typed and is not detected as binary document data, `bon` treats it as newline-delimited file paths if every non-empty line names an existing path. Stdin path lists are expanded in place, so they can be combined with normal CLI file arguments. Piped Typst document data is materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained; piped Typst paths keep their original location and asset access. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
+If no files are passed to the print command, `bon` fails with usage help. Use `-` to read from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-format typ` or `--stdin-format tex` for Typst or LaTeX text stdin. When stdin is not typed and is not detected as binary document data, `bon` treats it as newline-delimited file paths if every non-empty line names an existing path. Stdin path lists are expanded in place, so they can be combined with normal CLI file arguments. Piped Typst document data is materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained; piped Typst paths keep their original location and asset access. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
 
 Simulate options:
 
 - `-f, --format FORMAT` - output format, `png` or `pdf`.
-- `--paper-mm N` - simulated physical paper width in millimeters.
+- `-w, --width N` - simulated physical paper width in millimeters.
 - `--content-mm N` - override printed content width in millimeters.
 - `--ppi N` - content render PPI and image physical-size PPI.
 - `--mockup-ppi N` - final mockup image PPI.
@@ -142,7 +142,7 @@ Simulate options:
 - `--bottom-mm N` - paper shown below the printed content.
 - `--out-dir DIR` - directory for generated outputs.
 - `--typst-bin PATH` - Typst executable to use.
-- `--no-crop` - do not center-crop content wider than printable width.
+- `-u, --no-crop` - do not center-crop content wider than printable width.
 - `--background-tint HEX` - paper background tint as `#RRGGBB` or `RRGGBB`.
 - `--foreground-color HEX` - mockup foreground color as `#RRGGBB` or `RRGGBB`.
 - `--foreground-fade N` - mockup foreground opacity from `0.0` to `1.0`.
@@ -277,7 +277,7 @@ Exercise stdin handling with repository-local fixtures:
 
 ```sh
 cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
-cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-format typ -
 printf '%s\n' spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex | mise run run -- --dry-run -
 ```
 

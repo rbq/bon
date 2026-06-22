@@ -14,6 +14,6 @@ Stdin smoke tests can reuse these fixtures without adding generated files:
 
 ```sh
 cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
-cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-format typ -
 printf '%s\n' spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex | mise run run -- --dry-run -
 ```

@@ -47,8 +47,14 @@ module Bon
 
     private def dispatch(argv : Array(String)) : Tuple(String, Array(String))
       first = argv.first?
-      if first == "sim"
+      if first == "sim" || first == "s"
         {"simulate", argv[1..]}
+      elsif first == "p"
+        {"print", argv[1..]}
+      elsif first == "c"
+        {"config", argv[1..]}
+      elsif first == "i"
+        {"init", argv[1..]}
       elsif first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config"
         {first.not_nil!, argv[1..]}
       else
@@ -120,36 +126,36 @@ module Bon
                  bon print margins [options]
                  bon simulate [options] [FILE...]
                  bon simulate margins [options]
-                 bon sim [options] [FILE...]
+                 bon sim|s [options] [FILE...]
                  bon printer [list]
-                 bon config <check|show|edit>
-                 bon init [options]
+                 bon config|c <check|show|edit>
+                 bon init|i [options]
 
           Commands:
-            print      Print files, stdin document data, or stdin path lists. This is the default command.
+            print,p    Print files, stdin document data, or stdin path lists. This is the default command.
             margins    Print the built-in 10 mm margin calibration sheet.
             simulate   Render receipt mockups for Typst and image inputs.
-            sim        Alias for simulate.
+            sim,s      Alias for simulate.
             printer    List discovered CUPS printer queues.
-            config     Validate, show, or edit configuration.
-            init       Create or refresh a config file from printer discovery.
+            config,c   Validate, show, or edit configuration.
+            init,i     Create or refresh a config file from printer discovery.
 
           Print options:
           TEXT
 
-        parser.on("-d NAME", "--printer=NAME", "CUPS printer queue") { |name| config.printer_name = name }
+        parser.on("-p NAME", "--printer=NAME", "CUPS printer queue") { |name| config.printer_name = name }
         parser.on("-n N", "--copies=N", "Number of copies") { |copies| config.cups_copies = parse_int(copies, "--copies") }
-        parser.on("-o KEY=VALUE", "--option=KEY=VALUE", "Additional CUPS option") do |option|
+        parser.on("-c KEY=VALUE", "--cups=KEY=VALUE", "Additional CUPS option") do |option|
           key, separator, value = option.partition("=")
           raise Error.new("CUPS option must use KEY=VALUE syntax: #{option}") if separator.empty? || key.empty?
           @cli_options[key] = value
         end
-        parser.on("--paper-mm=N", "Physical paper width in millimeters") { |value| config.paper_width_mm = parse_float(value, "--paper-mm") }
+        parser.on("-w N", "--width=N", "Physical paper width in millimeters") { |value| config.paper_width_mm = parse_float(value, "--width") }
         parser.on("--printable-width-pt=N", "Printable CUPS width in points") { |value| config.printable_width_pt = parse_float(value, "--printable-width-pt") }
         parser.on("--raster-threshold=N", "Raster darkness cutoff from 0.0 to 1.0") { |value| config.raster_threshold = parse_float(value, "--raster-threshold") }
         parser.on("--raster-dither=MODE", "Raster dithering: none or ordered") { |value| config.raster_dither = value }
-        parser.on("--stdin-as=TYPE", "Type for stdin document data: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
-        parser.on("--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
+        parser.on("-f TYPE", "--stdin-format=TYPE", "Type for stdin document data: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
+        parser.on("-u", "--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
         parser.on("-v", "--version", "Show version") { @show_version = true }
         parser.on("-h", "--help", "Show help") { @show_help = true }
@@ -201,7 +207,7 @@ module Bon
       subcommands = [] of String
       parser = OptionParser.new do |parser|
         parser.banner = <<-TEXT
-          Usage: bon config <check|show|edit> [options]
+          Usage: bon config|c <check|show|edit> [options]
 
           Commands:
             check      Validate config files and show which sources are used.
@@ -375,7 +381,7 @@ module Bon
     private def build_simulate_parser(options : Simulate::Options, files : Array(String), show_help : Array(Bool)) : OptionParser
       OptionParser.new do |parser|
         parser.banner = <<-TEXT
-          Usage: bon simulate|sim [options] [FILE...]
+          Usage: bon simulate|sim|s [options] [FILE...]
                  bon simulate margins [options]
 
           Commands:
@@ -384,8 +390,8 @@ module Bon
           Simulate options:
           TEXT
         parser.on("-f FORMAT", "--format=FORMAT", "Output format, png or pdf") { |value| options.format = value.sub(/^\./, "") }
-        parser.on("--paper-mm=N", "Simulated paper width in millimeters") do |value|
-          options.paper_mm = parse_float(value, "--paper-mm")
+        parser.on("-w N", "--width=N", "Simulated paper width in millimeters") do |value|
+          options.paper_mm = parse_float(value, "--width")
           options.printable_width_mm = Config.default_printable_width_pt(options.paper_mm) * 25.4 / 72.0 if options.printable_width_auto
         end
         parser.on("--content-mm=N", "Printed content width in millimeters") { |value| options.content_mm = parse_float(value, "--content-mm") }
@@ -393,7 +399,7 @@ module Bon
         parser.on("--mockup-ppi=N", "Final mockup image PPI") { |value| options.mockup_ppi = parse_int(value, "--mockup-ppi") }
         parser.on("--top-mm=N", "Paper shown above the printed content") { |value| options.top_mm = parse_float(value, "--top-mm") }
         parser.on("--bottom-mm=N", "Paper shown below the printed content") { |value| options.bottom_mm = parse_float(value, "--bottom-mm") }
-        parser.on("--no-crop", "Do not center-crop content wider than printable width") { options.no_crop = true }
+        parser.on("-u", "--no-crop", "Do not center-crop content wider than printable width") { options.no_crop = true }
         parser.on("--background-tint=HEX", "Paper background tint as #RRGGBB") { |value| options.background_tint = value }
         parser.on("--foreground-color=HEX", "Mockup foreground color, for example #232320") { |value| options.foreground_rgb = Simulate.parse_color(value) }
         parser.on("--foreground-fade=N", "Mockup foreground opacity from 0.0 to 1.0") { |value| options.foreground_fade = parse_float(value, "--foreground-fade") }
@@ -413,12 +419,12 @@ module Bon
       raise Error.new("--format is required") if options.format.empty?
       raise Error.new("--format must not contain path separators") if options.format.includes?(File::SEPARATOR) || options.format.includes?('/') || options.format.includes?('\\')
       raise Error.new("--format must be png or pdf") unless {"png", "pdf"}.includes?(options.format)
-      raise Error.new("--paper-mm, --ppi, and --mockup-ppi must be positive") unless options.paper_mm > 0 && options.ppi > 0 && options.mockup_ppi > 0
+      raise Error.new("--width, --ppi, and --mockup-ppi must be positive") unless options.paper_mm > 0 && options.ppi > 0 && options.mockup_ppi > 0
       raise Error.new("printable width must be positive") unless options.printable_width_mm > 0
-      raise Error.new("printable width must not exceed --paper-mm") if options.printable_width_mm > options.paper_mm
+      raise Error.new("printable width must not exceed --width") if options.printable_width_mm > options.paper_mm
       if content_mm = options.content_mm
         raise Error.new("--content-mm must be positive") unless content_mm > 0
-        raise Error.new("--content-mm must not exceed --paper-mm") if content_mm > options.paper_mm
+        raise Error.new("--content-mm must not exceed --width") if content_mm > options.paper_mm
       end
       raise Error.new("simulate margin values cannot be negative") if options.top_mm < 0 || options.bottom_mm < 0 || options.min_top_mm < 0 || options.min_bottom_mm < 0
       raise Error.new("--foreground-fade must be between 0.0 and 1.0") unless options.foreground_fade >= 0.0 && options.foreground_fade <= 1.0
@@ -621,7 +627,7 @@ module Bon
       end
 
       unless ext
-        raise Error.new("Could not detect stdin input type or path list; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex for document content")
+        raise Error.new("Could not detect stdin input type or path list; pass --stdin-format=pdf|png|jpg|jpeg|typ|tex for document content")
       end
 
       path = File.join(temp_dir, "stdin#{ext}")
@@ -654,7 +660,7 @@ module Bon
       ext = ".#{normalized}"
       return ext if Document::SUPPORTED_SUFFIXES.includes?(ext)
 
-      raise Error.new("--stdin-as must be one of: pdf, png, jpg, jpeg, typ, tex")
+      raise Error.new("--stdin-format must be one of: pdf, png, jpg, jpeg, typ, tex")
     end
 
     private def with_temp_dir(prefix : String, & : String -> T) : T forall T

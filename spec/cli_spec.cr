@@ -18,20 +18,24 @@ describe Bon::Cli do
     help.should contain("bon print margins [options]")
     help.should contain("bon simulate [options] [FILE...]")
     help.should contain("bon simulate margins [options]")
-    help.should contain("bon sim [options] [FILE...]")
+    help.should contain("bon sim|s [options] [FILE...]")
     help.should contain("bon printer [list]")
-    help.should contain("bon config <check|show|edit>")
-    help.should contain("bon init [options]")
-    help.should contain("print      Print files, stdin document data, or stdin path lists")
+    help.should contain("bon config|c <check|show|edit>")
+    help.should contain("bon init|i [options]")
+    help.should contain("print,p    Print files, stdin document data, or stdin path lists")
     help.should contain("margins    Print the built-in 10 mm margin calibration sheet")
     help.should contain("simulate   Render receipt mockups")
-    help.should contain("sim        Alias for simulate")
+    help.should contain("sim,s      Alias for simulate")
     help.should contain("printer    List discovered CUPS printer queues")
-    help.should contain("config     Validate, show, or edit configuration")
-    help.should contain("init       Create or refresh a config file")
+    help.should contain("config,c   Validate, show, or edit configuration")
+    help.should contain("init,i     Create or refresh a config file")
     help.should contain("--raster-threshold=N")
     help.should contain("--raster-dither=MODE")
-    help.should contain("--stdin-as=TYPE")
+    help.should contain("-p NAME, --printer=NAME")
+    help.should contain("-c KEY=VALUE, --cups=KEY=VALUE")
+    help.should contain("-w N, --width=N")
+    help.should contain("-f TYPE, --stdin-format=TYPE")
+    help.should contain("-u, --no-crop")
   end
 
   it "documents the simulate alias in simulate help" do
@@ -43,10 +47,11 @@ describe Bon::Cli do
     status.should eq(0)
     stderr.to_s.should eq("")
     help = stdout.to_s
-    help.should contain("Usage: bon simulate|sim [options] [FILE...]")
+    help.should contain("Usage: bon simulate|sim|s [options] [FILE...]")
     help.should contain("bon simulate margins [options]")
     help.should contain("margins    Render the built-in 10 mm margin calibration sheet")
-    help.should contain("--no-crop")
+    help.should contain("-w N, --width=N")
+    help.should contain("-u, --no-crop")
     help.should contain("--background-tint=HEX")
   end
 
@@ -85,7 +90,7 @@ describe Bon::Cli do
         stderr = IO::Memory.new
         Bon::Cli.run(["sim", "--help"], stdout, stderr).should eq(0)
         stderr.to_s.should eq("")
-        stdout.to_s.should contain("Usage: bon simulate|sim [options] [FILE...]")
+        stdout.to_s.should contain("Usage: bon simulate|sim|s [options] [FILE...]")
       end
     end
   end
@@ -135,7 +140,7 @@ describe Bon::Cli do
     status.should eq(0)
     stderr.to_s.should eq("")
     help = stdout.to_s
-    help.should contain("Usage: bon config <check|show|edit> [options]")
+    help.should contain("Usage: bon config|c <check|show|edit> [options]")
     help.should contain("check      Validate config files")
     help.should contain("show       Show the effective merged config")
     help.should contain("edit       Open the config file")
@@ -151,7 +156,7 @@ describe Bon::Cli do
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "EDITOR" => "bon-test-editor", "VISUAL" => "", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
         Dir.cd(dir) do
           path = File.join(Dir.current, "bon.toml")
-          status = Bon::Cli.run(["config", "edit"], stdout, stderr)
+          status = Bon::Cli.run(["c", "edit"], stdout, stderr)
 
           status.should eq(0)
           stderr.to_s.should eq("")
@@ -201,6 +206,25 @@ describe Bon::Cli do
           status.should eq(2)
           stdout.to_s.should eq("")
           stderr.to_s.should contain("error: paper.width_mm must be positive")
+        end
+      end
+    end
+  end
+
+  it "initializes config with the i alias" do
+    with_cli_temp_dir do |dir|
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => dir, "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          path = File.join(Dir.current, "bon.toml")
+          status = Bon::Cli.run(["i", "--no-interactive"], stdout, stderr)
+
+          status.should eq(0)
+          stdout.to_s.should eq("#{path}\n")
+          stderr.to_s.should contain("warning: could not discover CUPS printers")
+          File.exists?(path).should be_true
         end
       end
     end
@@ -314,6 +338,28 @@ describe Bon::Cli do
     end
   end
 
+  it "supports the p command alias and renamed print options" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "receipt.pdf")
+      File.write(source, "%PDF-1.7\n1 0 obj <</MediaBox [0 0 100 120]>> endobj\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        status = Bon::Cli.run(["p", "--dry-run", "-p", "EPSON_TM_m30III", "-c", "fit-to-page=true", "-w", "58", "-u", source], stdout, stderr)
+
+        status.should eq(0)
+        stderr.to_s.should eq("")
+        output = stdout.to_s
+        output.should contain("lp -d EPSON_TM_m30III -n 1")
+        output.should contain("-o fit-to-page=true")
+        output.should contain("-o media=Custom.100x120")
+      end
+    end
+  end
+
   it "dry-runs Typst printing through a PDF-first cropped CUPS job" do
     with_cli_temp_dir do |dir|
       source = File.join(dir, "receipt.typ")
@@ -392,7 +438,7 @@ describe Bon::Cli do
         Dir.cd(dir) do
           expected_output = File.join(Dir.current, "margins_80mm-printout.png")
 
-          status = Bon::Cli.run(["simulate", "margins", "--typst-bin=#{fake_typst}", "--top-mm=0", "--bottom-mm=0"], stdout, stderr)
+          status = Bon::Cli.run(["s", "margins", "--typst-bin=#{fake_typst}", "--top-mm=0", "--bottom-mm=0"], stdout, stderr)
 
           status.should eq(0)
           stderr.to_s.should eq("")
@@ -550,7 +596,7 @@ describe Bon::Cli do
       stdin = IO::Memory.new("#set page(width: 80mm, height: 300pt)\nHello\n")
 
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
-        status = Bon::Cli.run(["--dry-run", "--stdin-as", "typ", "-"], stdout, stderr, stdin)
+          status = Bon::Cli.run(["--dry-run", "--stdin-format", "typ", "-"], stdout, stderr, stdin)
 
         status.should eq(0)
         stderr.to_s.should eq("")
@@ -573,7 +619,7 @@ describe Bon::Cli do
 
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
         Dir.cd(dir) do
-          status = Bon::Cli.run(["--dry-run", "--stdin-as=tex", "-"], stdout, stderr, stdin)
+          status = Bon::Cli.run(["--dry-run", "-f", "tex", "-"], stdout, stderr, stdin)
 
           status.should eq(0)
           stderr.to_s.should eq("")
@@ -609,7 +655,7 @@ describe Bon::Cli do
     end
   end
 
-  it "rejects undetectable text stdin without --stdin-as" do
+  it "rejects undetectable text stdin without --stdin-format" do
     with_cli_temp_dir do |dir|
       install_fake_lpstat(dir)
       install_fake_print_tools(dir)
@@ -622,21 +668,21 @@ describe Bon::Cli do
 
         status.should eq(2)
         stdout.to_s.should eq("")
-        stderr.to_s.should contain("error: Could not detect stdin input type or path list; pass --stdin-as=pdf|png|jpg|jpeg|typ|tex for document content")
+        stderr.to_s.should contain("error: Could not detect stdin input type or path list; pass --stdin-format=pdf|png|jpg|jpeg|typ|tex for document content")
       end
     end
   end
 
-  it "rejects invalid --stdin-as before printer discovery" do
+  it "rejects invalid --stdin-format before printer discovery" do
     stdout = IO::Memory.new
     stderr = IO::Memory.new
     stdin = IO::Memory.new("%PDF-1.7\n")
 
-    status = Bon::Cli.run(["--dry-run", "--stdin-as", "gif", "-"], stdout, stderr, stdin)
+    status = Bon::Cli.run(["--dry-run", "--stdin-format", "gif", "-"], stdout, stderr, stdin)
 
     status.should eq(2)
     stdout.to_s.should eq("")
-    stderr.to_s.should contain("error: --stdin-as must be one of: pdf, png, jpg, jpeg, typ, tex")
+    stderr.to_s.should contain("error: --stdin-format must be one of: pdf, png, jpg, jpeg, typ, tex")
   end
 
   it "rejects multiple stdin sources before reading stdin" do
@@ -660,7 +706,7 @@ describe Bon::Cli do
       stdin = IO::Memory.new
 
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
-        status = Bon::Cli.run(["--dry-run", "--stdin-as", "pdf", "-"], stdout, stderr, stdin)
+        status = Bon::Cli.run(["--dry-run", "--stdin-format", "pdf", "-"], stdout, stderr, stdin)
 
         status.should eq(2)
         stdout.to_s.should eq("")
