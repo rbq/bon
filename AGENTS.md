@@ -58,7 +58,7 @@ When modifying the application, keep all of the following in sync:
 - Run `bin/release-check` after changelog curation. This runs specs, builds `bin/bon-release`, checks `bon -v` and `bon --version`, checks changelog coverage, and validates exact tag consistency when on a tag.
 - Commit release changes only when the user asks for a commit or when the release task explicitly includes committing. Use a concise release commit such as `Prepare v<version> release`, and inspect staged diff before committing.
 - Create the annotated tag only after the release commit is on the intended branch and the user confirms tagging: run `bin/release-tag <version>`. This validates again and creates but does not push `v<version>`.
-- Push only with explicit user approval. To publish, push the tag with `git push origin v<version>`; CI publishes the GitHub release from the pushed tag and extracts the matching `CHANGELOG.md` section as the release body.
+- After the annotated tag is created, ask the user for final confirmation to publish. If they confirm, push the tag with `git push origin v<version>`; CI publishes the GitHub release from the pushed tag and extracts the matching `CHANGELOG.md` section as the release body.
 - If CI fails, diagnose from GitHub Actions logs and do not retag, force-push, or rewrite release history without explicit user approval.
 
 ## Implementation Notes
