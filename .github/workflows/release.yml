@@ -69,7 +69,7 @@ jobs:
           asset="bon-${version}-${{ matrix.asset_suffix }}"
           mkdir -p "dist/$asset"
           cp bin/bon-release "dist/$asset/bon"
-          cp README.md LICENSE "dist/$asset/"
+          cp README.md CHANGELOG.md LICENSE "dist/$asset/"
           chmod 755 "dist/$asset/bon"
           tar -C dist -czf "dist/$asset.tar.gz" "$asset"
 
@@ -88,6 +88,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract changelog entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            BEGIN { wanted = "## [" version "]"; wanted_v = "## [v" version "]" }
+            /^## \[/ {
+              if (found) exit
+              if (index($0, wanted) == 1 || index($0, wanted_v) == 1) found = 1
+            }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > release-notes.md
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -99,4 +117,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.tar.gz
-          generate_release_notes: true
+          body_path: release-notes.md
