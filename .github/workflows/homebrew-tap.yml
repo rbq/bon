@@ -1,9 +1,12 @@
 name: Publish Homebrew formula
 
 on:
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to publish to Homebrew
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,10 +14,10 @@ permissions:
 jobs:
   publish:
     name: Publish formula to tap
-    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     env:
       HOMEBREW_TAP_REPOSITORY: rbq/homebrew-tap
+      RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -23,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="${RELEASE_TAG}"
           version="${tag#v}"
           archive_url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${tag}.tar.gz"
 
