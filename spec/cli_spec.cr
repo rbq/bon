@@ -22,7 +22,7 @@ describe Bon::Cli do
     help.should contain("bon printer [list]")
     help.should contain("bon config <check|show|edit>")
     help.should contain("bon init [options]")
-    help.should contain("print      Print one or more files")
+    help.should contain("print      Print files, stdin document data, or stdin path lists")
     help.should contain("margins    Print the built-in 10 mm margin calibration sheet")
     help.should contain("simulate   Render receipt mockups")
     help.should contain("sim        Alias for simulate")
