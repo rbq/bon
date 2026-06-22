@@ -253,4 +253,31 @@ Regenerate mise stubs after task changes:
 mise generate task-stubs
 ```
 
+## Release Process
+
+`shard.yml` is the single version source. Release helpers live in `bin/release-*`, use mise-pinned tools internally, and publish through CI after an annotated `v<version>` tag is pushed.
+
+Prepare a release from a clean working tree:
+
+```sh
+bin/release-prepare 0.2.0
+```
+
+This updates `shard.yml` and prepends a generated `CHANGELOG.md` section. The changelog generator uses `git-cliff` without Conventional Commit parsing, so it emits a flat commit list that must be rewritten into user-facing release notes before tagging.
+
+Validate the release candidate:
+
+```sh
+bin/release-check
+```
+
+Commit the release files, merge them to `main`, then create the release tag from the release commit:
+
+```sh
+bin/release-tag 0.2.0
+git push origin v0.2.0
+```
+
+CI verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and publishes the matching changelog section as the GitHub release body.
+
 The implementation intentionally avoids shard dependencies. Crystal source lives under `src/`, and specs live under `spec/`.

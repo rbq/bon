@@ -9,8 +9,8 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Use `mise` as the entry point for reproducibility.
 - Use generated mise bin stubs when available.
 - Run `mise generate task-stubs` whenever mise task names are added, removed, or renamed.
-- Required and optional development tools are pinned in `.mise.toml`: Crystal `1.20.2`, TinyTeX `2026.06`, and Typst `0.14.2`.
-- Main development commands are `mise run spec`, `mise run build`, `mise run run -- --dry-run <file>`, and local `bon --dry-run <file>` through the generated mise stub.
+- Required and optional development tools are pinned in `.mise.toml`: Crystal `1.20.2`, git-cliff, TinyTeX `2026.06`, and Typst `0.14.2`.
+- Main development commands are `mise run spec`, `mise run build`, `mise run run -- --dry-run <file>`, `bin/release-check`, and local `bon --dry-run <file>` through the generated mise stub.
 - Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason.
 
 ## Workflow Guidance
@@ -58,6 +58,9 @@ When modifying the application, keep all of the following in sync:
 - Printer-specific overrides are stored under `[printer.<queue>.paper]`, `[printer.<queue>.render]` for `image_ppi`, and `[printer.<queue>.cups.options]`; they are applied only after CUPS queue discovery for printing.
 - The local TOML parser intentionally supports only the subset needed by the config schema: tables, dotted tables, strings, booleans, integers, floats, and string arrays.
 - The CLI version printed by `bon -v` and `bon --version` is embedded at compile time from `shard.yml`; tag releases must use `v<shard.yml version>` and CI verifies the match before publishing GitHub releases.
+- Release tooling is intentionally local-first: direct `bin/release-*` scripts use mise-pinned tools internally, `bin/release-prepare <version>` updates `shard.yml` and prepends a flat git-cliff changelog entry, humans rewrite that entry into user-facing notes, `bin/release-check` validates the candidate, and `bin/release-tag <version>` creates but does not push the annotated tag.
+- Keep release helpers as direct scripts under `bin/`, not same-named mise tasks, so `mise generate task-stubs` cannot overwrite them.
+- Changelog generation does not assume Conventional Commits. Keep `cliff.toml` configured for a flat commit list unless the project explicitly adopts commit classification.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
 - Print stdin uses `-` as a source marker, materializes the stream into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
