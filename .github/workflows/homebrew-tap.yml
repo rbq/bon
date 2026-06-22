@@ -7,6 +7,12 @@ on:
         description: Release tag to publish to Homebrew
         required: true
         type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish to Homebrew
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,6 +24,7 @@ jobs:
     env:
       HOMEBREW_TAP_REPOSITORY: rbq/homebrew-tap
       RELEASE_TAG: ${{ inputs.tag }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -29,9 +36,22 @@ jobs:
           tag="${RELEASE_TAG}"
           version="${tag#v}"
           archive_url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${tag}.tar.gz"
+          download_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/${tag}"
 
           mkdir -p dist
-          curl --fail --location --silent --show-error "$archive_url" --output dist/source.tar.gz
+          curl \
+            --fail \
+            --location \
+            --silent \
+            --show-error \
+            --retry 5 \
+            --retry-delay 2 \
+            --retry-all-errors \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$download_url" \
+            --output dist/source.tar.gz
           sha256="$(shasum -a 256 dist/source.tar.gz | cut -d ' ' -f 1)"
 
           {
