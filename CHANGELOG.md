@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] - 2026-06-22
+
+- Added file path input support through both CLI arguments and newline-delimited stdin path lists.
+- Documented the final release publishing confirmation step after creating an annotated tag.
+
 
 ## [0.1.2] - 2026-06-22
 
