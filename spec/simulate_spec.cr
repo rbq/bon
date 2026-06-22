@@ -26,18 +26,20 @@ describe Bon::Simulate do
     end
   end
 
-  it "discovers Typst and supported image inputs by default" do
+  it "discovers PDF, Typst, and supported image inputs by default" do
     with_temp_dir do |dir|
-      typ = File.join(dir, "a.typ")
-      png = File.join(dir, "b.png")
-      jpg = File.join(dir, "c.jpg")
-      jpeg = File.join(dir, "d.jpeg")
+      pdf = File.join(dir, "a.pdf")
+      typ = File.join(dir, "b.typ")
+      png = File.join(dir, "c.png")
+      jpg = File.join(dir, "d.jpg")
+      jpeg = File.join(dir, "e.jpeg")
+      File.write(pdf, "%PDF-1.7\n/MediaBox [0 0 144 288]\n%%EOF\n")
       File.write(typ, "#set page(width: 80mm, height: auto)\n")
       Bon::Simulate.write_png(png, 1, 1, Bytes[255, 255, 255])
       File.write(jpg, "stub")
       File.write(jpeg, "stub")
 
-      Bon::Simulate.default_sources(dir).should eq([typ, png, jpg, jpeg].sort)
+      Bon::Simulate.default_sources(dir).should eq([pdf, typ, png, jpg, jpeg].sort)
     end
   end
 
@@ -151,6 +153,44 @@ describe Bon::Simulate do
           File.join(dir, "multi-page-002_80mm-printout.png"),
         ])
         outputs.each { |output| File.exists?(output).should be_true }
+      end
+    end
+  end
+
+  it "renders one mockup per PDF page" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "multi.pdf")
+      fake_png = File.join(dir, "content.png")
+      fake_gs = File.join(dir, "gs")
+      log = File.join(dir, "gs-args.log")
+      File.write(source, "%PDF-1.7\n/MediaBox [0 0 144 288]\n/MediaBox [0 0 72 144]\n%%EOF\n")
+      Bon::Simulate.write_png(fake_png, 2, 1, Bytes[0, 0, 0, 255, 255, 255])
+      File.write(fake_gs, <<-SH)
+        #!/bin/sh
+        printf '%s\n' "$@" >> "$BON_GS_LOG"
+        for arg do
+          case "$arg" in
+            -sOutputFile=*) output=${arg#-sOutputFile=} ;;
+          esac
+        done
+        cp "$BON_FAKE_PNG" "$output"
+        SH
+      File.chmod(fake_gs, 0o755)
+
+      with_env({"BON_FAKE_PNG" => fake_png, "BON_GS_LOG" => log, "PATH" => "#{dir}:#{ENV["PATH"]}"}) do
+        options = Bon::Simulate::Options.new(out_dir: dir, top_mm: 0.0, bottom_mm: 0.0)
+
+        outputs = Bon::Simulate.render_sources([source], options)
+
+        outputs.should eq([
+          File.join(dir, "multi-page-001_80mm-printout.png"),
+          File.join(dir, "multi-page-002_80mm-printout.png"),
+        ])
+        outputs.each { |output| File.exists?(output).should be_true }
+        args = File.read(log)
+        args.should contain("-sDEVICE=png16m")
+        args.should contain("-dFirstPage=1")
+        args.should contain("-dFirstPage=2")
       end
     end
   end

@@ -57,6 +57,7 @@ describe "spec examples" do
       "receipt.jpeg",
       "receipt.jpg",
       "receipt.png",
+      "variable-pages.pdf",
       "variable-pages.typ",
     ])
   end

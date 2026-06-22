@@ -134,7 +134,7 @@ module Bon
           Commands:
             print,p    Print files, stdin document data, or stdin path lists. This is the default command.
             margins    Print the built-in 10 mm margin calibration sheet.
-            simulate   Render receipt mockups for Typst and image inputs.
+            simulate   Render receipt mockups for PDF, Typst, and image inputs.
             sim,s      Alias for simulate.
             printer    List discovered CUPS printer queues.
             config,c   Validate, show, or edit configuration.

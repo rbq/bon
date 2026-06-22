@@ -89,7 +89,7 @@ When modifying the application, keep all of the following in sync:
 - Typst inputs run `typst compile --root <root> <source> <temp>.pdf`.
 - Image inputs use `render.image_ppi` to determine physical size and are sent directly to CUPS when no center-crop is needed.
 - Image inputs that need center-cropping fall back to a temporary Typst wrapper PDF and Ghostscript crop.
-- Simulation supports Typst and PNG/JPEG inputs; PNGs are read directly and JPEGs are rasterized through a temporary Typst wrapper.
+- Simulation supports PDF, Typst, and PNG/JPEG inputs; PDFs are rasterized page-by-page through Ghostscript, PNGs are read directly, and JPEGs are rasterized through a temporary Typst wrapper.
 - Simulation uses configured physical paper width, automatic/configured printable width, crop policy, `render.image_ppi`, and `[simulate]` top/bottom paper margins, background tint, foreground color, and foreground fade when generating mockups.
 - Default simulation vertical paper margins remain 10 mm before content and 14 mm after content, while separate technical minimum margins clamp mockups to at least 12 mm before content and 2 mm after content. Keep these configurable rather than changing actual print output.
 - Simulated mockups default to foreground color `#232320` and foreground fade `1.0`; keep those defaults to preserve the established mockup look.

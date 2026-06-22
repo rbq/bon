@@ -56,10 +56,11 @@ bon printer list
 bon -p EPSON_TM_m30III receipt.pdf
 ```
 
-Render a mockup before printing. Simulation supports Typst, PNG, and JPEG inputs:
+Render a mockup before printing. Simulation supports PDF, Typst, PNG, and JPEG inputs:
 
 ```sh
 bon simulate receipt.typ
+bon simulate receipt.pdf
 bon simulate --width 58 --out-dir preview receipt.png
 ```
 
@@ -107,7 +108,7 @@ Commands:
 
 - `print [options] FILE...|-` - print one or more files, one supported document from stdin, or newline-delimited paths from stdin with `-`. This is the default command, so `bon FILE...` also works. `p` is a short alias.
 - `print margins [options]` - print the built-in 80 mm x 80 mm two-page margin calibration sheet embedded from `src/bon/assets/margins.typ`.
-- `simulate [options] [FILE...]` - render receipt mockups for `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
+- `simulate [options] [FILE...]` - render receipt mockups for `.pdf`, `.typ`, `.png`, `.jpg`, and `.jpeg` inputs. If no files are passed, matching inputs in the current directory are used.
 - `simulate margins [options]` - render the same built-in margin calibration sheet into the current directory unless `--out-dir` is set.
 - `sim [options] [FILE...]` and `s [options] [FILE...]` - short aliases for `simulate`.
 - `printer [list]` - list discovered CUPS queues. `printer` is an alias for `printer list`.
@@ -245,7 +246,7 @@ For each input, `bon`:
 10. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
 11. Runs `lp` with the configured queue, copies, options, and final page path.
 
-`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PNG inputs are read directly; JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The paper shown before and after the content comes from `[simulate] top_mm` / `[simulate] bottom_mm` or `--top-mm` / `--bottom-mm`, clamped by `[simulate] min_top_mm` / `[simulate] min_bottom_mm` to reflect the printer's physical minimum margins. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags. Multi-page Typst simulations write one mockup per page, for example `margins-page-001_<paper>mm-printout.<format>` and `margins-page-002_<paper>mm-printout.<format>` for `bon simulate margins`.
+`bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PDF inputs are rasterized page-by-page through Ghostscript, PNG inputs are read directly, and JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The paper shown before and after the content comes from `[simulate] top_mm` / `[simulate] bottom_mm` or `--top-mm` / `--bottom-mm`, clamped by `[simulate] min_top_mm` / `[simulate] min_bottom_mm` to reflect the printer's physical minimum margins. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags. Multi-page PDF and Typst simulations write one mockup per page, for example `margins-page-001_<paper>mm-printout.<format>` and `margins-page-002_<paper>mm-printout.<format>` for `bon simulate margins`.
 
 ## Development
 

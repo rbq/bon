@@ -83,42 +83,43 @@ module Bon
     end
 
     def self.default_sources(cwd = Dir.current) : Array(String)
-      ["*.typ", "*.png", "*.jpg", "*.jpeg"].flat_map { |pattern| Dir.glob(File.join(cwd, pattern)) }.sort
+      ["*.pdf", "*.typ", "*.png", "*.jpg", "*.jpeg"].flat_map { |pattern| Dir.glob(File.join(cwd, pattern)) }.sort
     end
 
     def self.render_source(source : String, temp_dir : String, options : Options, output_io : IO = STDOUT, error_io : IO = STDERR) : Array(String)
       raise Error.new("Simulation input not found: #{source}") unless File.exists?(source)
       raise Error.new("Not a file: #{source}") unless File.file?(source)
       ext = File.extname(source).downcase
-      raise Error.new("simulate expects .typ, .png, .jpg, or .jpeg inputs: #{source}") unless supported_input?(ext)
+      raise Error.new("simulate expects .pdf, .typ, .png, .jpg, or .jpeg inputs: #{source}") unless supported_input?(ext)
 
       source_width = physical_source_width_mm(source, ext, options)
       if source_width > options.paper_mm + PDF::CROP_EPSILON_PT * 25.4 / 72.0
         raise Error.new("Input width #{format_mm(source_width)}mm exceeds #{format_mm(options.paper_mm)}mm paper width: #{source}")
       end
-      content_width = content_width_mm(source_width, options)
       basename = File.basename(source, ext)
       paper_rgb = parse_rgb(options.background_tint)
-      intermediate_pngs = [] of String
+      intermediate_pages = [] of Tuple(String, Float64)
 
       case ext
+      when ".pdf"
+        intermediate_pages = render_pdf_pages(source, temp_dir, basename, options.ppi, output_io, error_io)
       when ".typ"
-        intermediate_pngs = render_typst_pages(options.typst_bin, source, temp_dir, basename, options.ppi, Typst.root_for(source), output_io, error_io)
+        intermediate_pages = render_typst_pages(options.typst_bin, source, temp_dir, basename, options.ppi, Typst.root_for(source), output_io, error_io).map { |path| {path, source_width} }
       when ".jpg", ".jpeg"
         intermediate_png = File.join(temp_dir, "#{basename}-content.png")
         render_jpeg_to_png(source, intermediate_png, temp_dir, options, output_io, error_io)
-        intermediate_pngs << intermediate_png
+        intermediate_pages << {intermediate_png, source_width}
       else
-        intermediate_pngs << source
+        intermediate_pages << {source, source_width}
       end
 
-      multiple_pages = intermediate_pngs.size > 1
-      intermediate_pngs.map_with_index(1) do |intermediate_png, page_number|
+      multiple_pages = intermediate_pages.size > 1
+      intermediate_pages.map_with_index(1) do |(intermediate_png, page_width), page_number|
         output = output_path(source, options, multiple_pages ? page_number : nil)
         FileUtils.mkdir_p(File.dirname(output))
         mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{basename}-mockup-#{page_number}.png")
 
-        simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, effective_top_mm(options), effective_bottom_mm(options), seed_for(source) + page_number, source_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
+        simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width_mm(page_width, options), options.mockup_ppi, effective_top_mm(options), effective_bottom_mm(options), seed_for(source) + page_number, page_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
         convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
         output
       end
@@ -316,6 +317,34 @@ module Bon
       pages
     end
 
+    private def self.render_pdf_pages(source : String, temp_dir : String, basename : String, ppi : Int32, output_io : IO, error_io : IO) : Array(Tuple(String, Float64))
+      sizes = PDF.page_sizes(source)
+      gs = Command.require_executable("gs")
+
+      sizes.map_with_index do |size, index|
+        page_number = index + 1
+        output = File.join(temp_dir, "#{basename}-content-page-#{page_number.to_s.rjust(3, '0')}.png")
+        Command.run([
+          gs,
+          "-q",
+          "-dNOPAUSE",
+          "-dBATCH",
+          "-sDEVICE=png16m",
+          "-r#{ppi}x#{ppi}",
+          "-dTextAlphaBits=4",
+          "-dGraphicsAlphaBits=4",
+          "-dFirstPage=#{page_number}",
+          "-dLastPage=#{page_number}",
+          "-dDEVICEWIDTHPOINTS=#{PDF.format_points(size.width)}",
+          "-dDEVICEHEIGHTPOINTS=#{PDF.format_points(size.height)}",
+          "-dFIXEDMEDIA",
+          "-sOutputFile=#{output}",
+          source,
+        ], "PDF simulation render failed for #{source} page #{page_number}", false, false, output_io, error_io)
+        {output, size.width * 25.4 / 72.0}
+      end
+    end
+
     private def self.run_typst(typst_bin : String, input : String, output : String, format : String, ppi : Int32, root : String, output_io : IO, error_io : IO) : Nil
       typst = typst_bin.includes?(File::SEPARATOR) ? typst_bin : Command.require_executable(typst_bin)
       Command.run([
@@ -347,7 +376,9 @@ module Bon
     end
 
     private def self.physical_source_width_mm(source : String, ext : String, options : Options) : Float64
-      if ext == ".typ"
+      if ext == ".pdf"
+        PDF.print_size(source).width * 25.4 / 72.0
+      elsif ext == ".typ"
         source_width_mm(source) || options.paper_mm
       else
         Image.page_size(source, options.ppi).width * 25.4 / 72.0
@@ -365,7 +396,7 @@ module Bon
     end
 
     private def self.supported_input?(ext : String) : Bool
-      ext == ".typ" || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+      ext == ".pdf" || ext == ".typ" || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
     end
 
     private def self.typst_escape(path : String) : String
