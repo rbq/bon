@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5] - 2026-06-22
+
+- Added PDF input support to `bon simulate`, including page-by-page rasterization for multi-page PDFs.
+- Added shorter aliases for common commands and flags.
+- Updated configuration lookup paths and related CLI/docs behavior.
+- Added release automation for publishing the Homebrew formula when GitHub releases are published.
+
 ## [0.1.4] - 2026-06-22
 
 - Improved the README for installed users with a clearer installation note, first-run configuration flow, printer selection guidance, simulation examples, and printing examples that use user-owned files instead of repository fixtures.
