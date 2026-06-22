@@ -46,6 +46,21 @@ When modifying the application, keep all of the following in sync:
 - **Config schema** — if a config key is added, renamed, or removed, update `Config#overlay`, `Config#validate!`, `Config#build_toml`, the `README.md` config example, and any related specs together.
 - **Document support matrix** — if a supported input type is added or dropped, update `Document::SUPPORTED_SUFFIXES`, `README.md` (Requirements, CLI, and Print Pipeline sections), `AGENTS.md` Workflow Guidance, related specs, and repository-local examples.
 
+## Release Procedure
+
+- Releases are user-directed. Do not choose a release version, changelog wording, or publication timing without explicit user confirmation.
+- Start by inspecting the current state with `git status --short --untracked-files=all`, `git log --oneline -10`, `bin/release-version`, and existing tags when relevant.
+- Ask the user which version to release unless they already provided an exact version. If the version is ambiguous, present the current `shard.yml` version and recent release tags, then ask for the intended next version.
+- Prepare the release only after the user confirms the version: run `bin/release-prepare <version>` from a clean working tree. If the tree is dirty, stop and ask the user whether to commit, stash, or intentionally proceed only if the helper supports it and the user explicitly approves.
+- Inspect the generated `CHANGELOG.md` section after `bin/release-prepare <version>`. The generated entry is a flat commit list, not final release notes.
+- Involve the user in changelog curation. Ask the user to approve, provide, or review user-facing wording for new or manually edited `CHANGELOG.md` entries before tagging. Do not invent product claims, migration guidance, or breaking-change notes without evidence from the commits or user input.
+- Ensure `CHANGELOG.md` contains a heading for the exact release version, either `## [<version>]` or `## [v<version>]`, and that the entry is suitable for GitHub release notes.
+- Run `bin/release-check` after changelog curation. This runs specs, builds `bin/bon-release`, checks `bon -v` and `bon --version`, checks changelog coverage, and validates exact tag consistency when on a tag.
+- Commit release changes only when the user asks for a commit or when the release task explicitly includes committing. Use a concise release commit such as `Prepare v<version> release`, and inspect staged diff before committing.
+- Create the annotated tag only after the release commit is on the intended branch and the user confirms tagging: run `bin/release-tag <version>`. This validates again and creates but does not push `v<version>`.
+- Push only with explicit user approval. To publish, push the tag with `git push origin v<version>`; CI publishes the GitHub release from the pushed tag and extracts the matching `CHANGELOG.md` section as the release body.
+- If CI fails, diagnose from GitHub Actions logs and do not retag, force-push, or rewrite release history without explicit user approval.
+
 ## Implementation Notes
 
 - Config loads built-in defaults, global config from `$XDG_CONFIG_HOME/bon/config.toml` or `~/.config/bon/config.toml`, then local `./config.toml`.
