@@ -35,7 +35,7 @@ Create a config file from discovered printers:
 bon init
 ```
 
-Use `--global` to write `~/.config/bon/config.toml` instead of a local `./config.toml`:
+Use `--global` to write `~/.config/bon.toml` instead of a local `./bon.toml`:
 
 ```sh
 bon init --global
@@ -149,11 +149,11 @@ Simulate options:
 
 Config options:
 
-- `-g, --global` - with `config edit`, edit the global config instead of local `./config.toml`.
+- `-g, --global` - with `config edit`, edit the global config instead of local `./bon.toml`.
 
 Init options:
 
-- `--global` - write the global config instead of local `./config.toml`.
+- `--global` - write the global config instead of local `./bon.toml`.
 - `--force` - regenerate the config from the default template.
 - `--no-interactive` - avoid prompting and use deterministic printer selection.
 
@@ -162,11 +162,11 @@ Init options:
 Config is merged in this order:
 
 1. Built-in defaults.
-2. Global config from `$XDG_CONFIG_HOME/bon/config.toml` or `~/.config/bon/config.toml`.
-3. Local `./config.toml` from the current working directory.
+2. Global config from `$XDG_CONFIG_HOME/bon.toml` or `~/.config/bon.toml`.
+3. Local `./bon.toml` from the current working directory.
 4. CLI flags.
 
-While this project still lives inside the Bondrucker workspace, `./bon/config.toml` is also supported as a transition fallback when no local `./config.toml` exists. The repository ships `config.default.toml` as the user-facing template; machine-specific `config.toml` files should remain untracked.
+The repository ships `config.default.toml` as the user-facing template; machine-specific `bon.toml` files should remain untracked.
 
 Example generated config. Uncomment settings to override the built-in defaults:
 
@@ -260,6 +260,7 @@ mise install
 Pinned development tools:
 
 - Crystal `1.20.2`
+- git-cliff `latest`
 - TinyTeX `2026.06`
 - Typst `0.14.2`
 

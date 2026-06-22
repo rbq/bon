@@ -319,15 +319,15 @@ module Bon
                    @cups_options = {
                      "Resolution"        => "203x203dpi",
                      "TmxPaperCut"       => "CutPerPage",
-                      "TmxPaperReduction" => "Top",
+                     "TmxPaperReduction" => "Top",
                    },
-                    @simulate_top_mm = 10.0,
-                    @simulate_bottom_mm = 14.0,
-                    @simulate_min_top_mm = 12.0,
-                    @simulate_min_bottom_mm = 2.0,
+                   @simulate_top_mm = 10.0,
+                   @simulate_bottom_mm = 14.0,
+                   @simulate_min_top_mm = 12.0,
+                   @simulate_min_bottom_mm = 2.0,
                    @simulate_background_tint = "#f5f1e0",
                    @simulate_foreground_color = "#232320",
-                    @simulate_foreground_fade = 1.0)
+                   @simulate_foreground_fade = 1.0)
       @printable_width_pt = printable_width_pt
       @warnings = [] of String
       @printer_overrides = Hash(String, PrinterOverrides).new
@@ -386,12 +386,9 @@ module Bon
         statuses << ConfigSourceStatus.new("global", path, exists, exists)
       end
 
-      local = File.join(cwd, "config.toml")
-      legacy_local = File.join(cwd, "bon", "config.toml")
+      local = File.join(cwd, "bon.toml")
       local_exists = File.exists?(local)
-      legacy_exists = File.exists?(legacy_local)
       statuses << ConfigSourceStatus.new("local", local, local_exists, local_exists)
-      statuses << ConfigSourceStatus.new("legacy local", legacy_local, legacy_exists, !local_exists && legacy_exists)
       statuses
     end
 
@@ -408,9 +405,9 @@ module Bon
     def self.global_path : String?
       base = ENV["XDG_CONFIG_HOME"]?
       if base && !base.empty?
-        File.join(base, "bon", "config.toml")
+        File.join(base, "bon.toml")
       elsif home = ENV["HOME"]?
-        File.join(home, ".config", "bon", "config.toml")
+        File.join(home, ".config", "bon.toml")
       end
     end
 

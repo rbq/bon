@@ -52,7 +52,7 @@ describe Bon::Cli do
 
   it "shows root help and version without loading invalid local config" do
     with_cli_temp_dir do |dir|
-      File.write(File.join(dir, "config.toml"), "[paper]\nwidth_mm = -1\n")
+      File.write(File.join(dir, "bon.toml"), "[paper]\nwidth_mm = -1\n")
 
       Dir.cd(dir) do
         stdout = IO::Memory.new
@@ -78,7 +78,7 @@ describe Bon::Cli do
 
   it "shows simulate help without loading invalid local config" do
     with_cli_temp_dir do |dir|
-      File.write(File.join(dir, "config.toml"), "[paper]\nwidth_mm = -1\n")
+      File.write(File.join(dir, "bon.toml"), "[paper]\nwidth_mm = -1\n")
 
       Dir.cd(dir) do
         stdout = IO::Memory.new
@@ -150,7 +150,7 @@ describe Bon::Cli do
 
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "EDITOR" => "bon-test-editor", "VISUAL" => "", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
         Dir.cd(dir) do
-          path = File.join(Dir.current, "config.toml")
+          path = File.join(Dir.current, "bon.toml")
           status = Bon::Cli.run(["config", "edit"], stdout, stderr)
 
           status.should eq(0)
@@ -168,7 +168,7 @@ describe Bon::Cli do
       with_cli_temp_dir do |dir|
         install_fake_editor(dir, "printf '%s\n' '[paper]' 'width_mm = 58.0' >> \"$1\"")
         xdg_config = File.join(dir, "xdg")
-        global_config = File.join(xdg_config, "bon", "config.toml")
+        global_config = File.join(xdg_config, "bon.toml")
         stdout = IO::Memory.new
         stderr = IO::Memory.new
 
@@ -181,7 +181,7 @@ describe Bon::Cli do
             stdout.to_s.should contain("Config OK: #{global_config}")
             File.exists?(global_config).should be_true
             File.read(global_config).should contain("width_mm = 58.0")
-            File.exists?(File.join(dir, "config.toml")).should be_false
+            File.exists?(File.join(dir, "bon.toml")).should be_false
           end
         end
       end
@@ -209,8 +209,8 @@ describe Bon::Cli do
   it "checks config files and reports source usage" do
     with_cli_temp_dir do |dir|
       xdg_config = File.join(dir, "xdg")
-      global_config = File.join(xdg_config, "bon", "config.toml")
-      local_config = File.join(dir, "config.toml")
+      global_config = File.join(xdg_config, "bon.toml")
+      local_config = File.join(dir, "bon.toml")
       FileUtils.mkdir_p(File.dirname(global_config))
       File.write(global_config, "[paper]\nwidth_mm = 58.0\n")
       File.write(local_config, "[cups]\ncopies = 2\n")
@@ -219,8 +219,7 @@ describe Bon::Cli do
 
       with_cli_env({"XDG_CONFIG_HOME" => xdg_config}) do
         Dir.cd(dir) do
-          current_local = File.join(Dir.current, "config.toml")
-          current_legacy = File.join(Dir.current, "bon", "config.toml")
+          current_local = File.join(Dir.current, "bon.toml")
           status = Bon::Cli.run(["config", "check"], stdout, stderr)
 
           status.should eq(0)
@@ -230,7 +229,7 @@ describe Bon::Cli do
           output.should contain("defaults: built-in (used)")
           output.should contain("global: #{global_config} (used)")
           output.should contain("local: #{current_local} (used)")
-          output.should contain("legacy local: #{current_legacy} (not found)")
+          output.should_not contain("legacy local:")
         end
       end
     end
@@ -239,7 +238,7 @@ describe Bon::Cli do
   it "shows the effective merged config including defaults" do
     with_cli_temp_dir do |dir|
       xdg_config = File.join(dir, "xdg")
-      local_config = File.join(dir, "config.toml")
+      local_config = File.join(dir, "bon.toml")
       File.write(local_config, "[paper]\nwidth_mm = 58.0\n")
       stdout = IO::Memory.new
       stderr = IO::Memory.new
@@ -267,7 +266,7 @@ describe Bon::Cli do
   it "fails config check when a used config file is invalid" do
     with_cli_temp_dir do |dir|
       xdg_config = File.join(dir, "xdg")
-      File.write(File.join(dir, "config.toml"), "[paper]\nwidth_mm = -1\n")
+      File.write(File.join(dir, "bon.toml"), "[paper]\nwidth_mm = -1\n")
       stdout = IO::Memory.new
       stderr = IO::Memory.new
 
@@ -408,7 +407,7 @@ describe Bon::Cli do
     with_cli_temp_dir do |dir|
       source = File.join(dir, "receipt.tex")
       File.write(source, "\\documentclass{article}\\begin{document}Hello\\end{document}\n")
-      File.write(File.join(dir, "config.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
+      File.write(File.join(dir, "bon.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
       install_fake_lpstat(dir)
       install_fake_print_tools(dir)
       stdout = IO::Memory.new
@@ -565,7 +564,7 @@ describe Bon::Cli do
 
   it "dry-runs LaTeX stdin when explicitly typed" do
     with_cli_temp_dir do |dir|
-      File.write(File.join(dir, "config.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
+      File.write(File.join(dir, "bon.toml"), "[render]\nlatex_engine = \"pdflatex\"\n")
       install_fake_lpstat(dir)
       install_fake_print_tools(dir)
       stdout = IO::Memory.new

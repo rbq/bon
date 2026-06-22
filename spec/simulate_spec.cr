@@ -304,7 +304,7 @@ describe Bon::Cli do
 
       with_env({"BON_FAKE_PNG" => fake_png, "XDG_CONFIG_HOME" => xdg_config}) do
         Dir.cd(dir) do
-          File.write("config.toml", <<-TOML)
+          File.write("bon.toml", <<-TOML)
             [paper]
             width_mm = 2.0
             printable_width_pt = 5.0
@@ -342,7 +342,7 @@ describe Bon::Cli do
 
       with_env({"XDG_CONFIG_HOME" => xdg_config}) do
         Dir.cd(dir) do
-          File.write("config.toml", <<-TOML)
+          File.write("bon.toml", <<-TOML)
             [paper]
             width_mm = 1.0
             printable_width_pt = 1.0

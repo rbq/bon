@@ -6,6 +6,7 @@
 /bin/bon-debug.dwarf
 /bin/bon-release
 /bin/bon-release.dwarf
+/bon.toml
 /config.toml
 /coverage/
 /lib/

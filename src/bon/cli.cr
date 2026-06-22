@@ -8,7 +8,7 @@ require "./simulate"
 
 module Bon
   class Cli
-    VERSION = {{ read_file("shard.yml").match(/^version:\s*(\S+)\s*$/m)[1] }}
+    VERSION     = {{ read_file("shard.yml").match(/^version:\s*(\S+)\s*$/m)[1] }}
     MARGINS_TYP = {{ read_file("src/bon/assets/margins.typ") }}
 
     def self.run(argv = ARGV, output_io : IO = STDOUT, error_io : IO = STDERR, input_io : IO = STDIN) : Int32
@@ -99,7 +99,7 @@ module Bon
       if margins_command
         with_margins_typ_source { |source| print_documents([source], queue.name, config) }
       else
-            print_documents(@files, queue.name, config)
+        print_documents(@files, queue.name, config)
       end
       0
     end
@@ -267,7 +267,7 @@ module Bon
       path = if use_global
                Config.global_path || raise Error.new("Could not determine global config path")
              else
-               File.join(Dir.current, "config.toml")
+               File.join(Dir.current, "bon.toml")
              end
 
       ensure_config_file(path)
@@ -447,7 +447,7 @@ module Bon
       path = if use_global
                Config.global_path || raise Error.new("Could not determine global config path")
              else
-               File.join(Dir.current, "config.toml")
+               File.join(Dir.current, "bon.toml")
              end
       existing = File.exists?(path) ? File.read(path) : nil
       configured = existing ? configured_printer_from_text(existing, path) : nil

@@ -177,6 +177,37 @@ describe Bon::Config do
     File.read(template_path).should eq(Bon::Config.default_toml)
   end
 
+  it "resolves global config directly under XDG_CONFIG_HOME" do
+    previous = ENV["XDG_CONFIG_HOME"]?
+    ENV["XDG_CONFIG_HOME"] = "/tmp/bon-xdg"
+    begin
+      Bon::Config.global_path.should eq("/tmp/bon-xdg/bon.toml")
+    ensure
+      if previous
+        ENV["XDG_CONFIG_HOME"] = previous
+      else
+        ENV.delete("XDG_CONFIG_HOME")
+      end
+    end
+  end
+
+  it "uses bon.toml as the local config source" do
+    previous = ENV["XDG_CONFIG_HOME"]?
+    ENV["XDG_CONFIG_HOME"] = "/tmp/bon-xdg"
+    begin
+      statuses = Bon::Config.source_statuses("/tmp/bon-cwd")
+
+      statuses.map(&.label).should eq(["global", "local"])
+      statuses.last.path.should eq("/tmp/bon-cwd/bon.toml")
+    ensure
+      if previous
+        ENV["XDG_CONFIG_HOME"] = previous
+      else
+        ENV.delete("XDG_CONFIG_HOME")
+      end
+    end
+  end
+
   it "does not include active printer candidates in generated TOML defaults" do
     defaults = Bon::Config.default_toml
 
