@@ -76,7 +76,7 @@ When modifying the application, keep all of the following in sync:
 - Keep release helpers as direct scripts under `bin/`, not same-named mise tasks, so `mise generate task-stubs` cannot overwrite them.
 - Changelog generation does not assume Conventional Commits. Keep `cliff.toml` configured for a flat commit list unless the project explicitly adopts commit classification.
 - `.github/workflows/build.yml` is the CI entrypoint for pull requests, `main`, and `v*` tags; tag builds call the reusable `.github/workflows/release.yml`, which publishes the GitHub release and then calls the reusable Homebrew tap workflow.
-- `.homebrew/bon.rb.erb` is the authoritative Homebrew formula template; the reusable Homebrew tap workflow renders it and updates `rbq/homebrew-tap` with `HOMEBREW_TAP_TOKEN`. It can also be manually dispatched with a release tag when only the tap publication needs to be retried.
+- `.homebrew/bon.rb.erb` is the authoritative Homebrew formula template; the reusable Homebrew tap workflow renders it and updates `rbq/homebrew-tap` with `HOMEBREW_TAP_TOKEN`, which must authenticate to the private tap repository. It can also be manually dispatched with a release tag when only the tap publication needs to be retried.
 - CUPS discovery uses `lpstat -v` and `lpstat -p` only.
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
 - Print stdin uses `-` as a source marker. If `--stdin-format` is omitted and binary document detection fails, stdin is treated as a newline-delimited path list only when every non-empty line exists; those paths are expanded in place alongside CLI file arguments.
