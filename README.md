@@ -325,6 +325,6 @@ bin/release-tag 0.2.0
 git push origin v0.2.0
 ```
 
-CI verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and publishes the matching changelog section as the GitHub release body.
+CI verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and publishes the matching changelog section as the GitHub release body. When the GitHub release is published, a separate workflow renders `.homebrew/bon.rb.erb`, computes the tag source archive SHA256, and updates `Formula/bon.rb` in `rbq/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured for the repository.
 
 The implementation intentionally avoids shard dependencies. Crystal source lives under `src/`, and specs live under `spec/`.

@@ -1,0 +1,30 @@
+class Bon < Formula
+  desc "Receipt-printer CLI for PDFs, images, Typst, and LaTeX"
+  homepage "https://github.com/rbq/bon"
+  url "<%= url %>"
+  sha256 "<%= sha256 %>"
+  license "MIT"
+  version "<%= version %>"
+
+  head "https://github.com/rbq/bon.git", branch: "main"
+
+  depends_on "crystal" => :build
+  depends_on "ghostscript"
+
+  def install
+    system "crystal", "build", "src/bon.cr", "--release", "--no-debug", "-o", bin/"bon"
+  end
+
+  def caveats
+    <<~EOS
+      Typst output support requires Typst. Install it with:
+        brew install typst
+
+      LaTeX output support requires an external LaTeX engine such as latexmk, tectonic, or pdflatex.
+    EOS
+  end
+
+  test do
+    assert_match "bon #{version}", shell_output("#{bin}/bon --version")
+  end
+end

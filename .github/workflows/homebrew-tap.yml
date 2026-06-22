@@ -1,0 +1,80 @@
+name: Publish Homebrew formula
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish formula to tap
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    env:
+      HOMEBREW_TAP_REPOSITORY: rbq/homebrew-tap
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Determine release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          archive_url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${tag}.tar.gz"
+
+          mkdir -p dist
+          curl --fail --location --silent --show-error "$archive_url" --output dist/source.tar.gz
+          sha256="$(shasum -a 256 dist/source.tar.gz | cut -d ' ' -f 1)"
+
+          {
+            echo "HOMEBREW_VERSION=$version"
+            echo "HOMEBREW_ARCHIVE_URL=$archive_url"
+            echo "HOMEBREW_ARCHIVE_SHA256=$sha256"
+          } >> "$GITHUB_ENV"
+
+      - name: Render formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -rerb -e '
+            template = ERB.new(File.read(".homebrew/bon.rb.erb"), trim_mode: "-")
+            rendered = template.result_with_hash(
+              version: ENV.fetch("HOMEBREW_VERSION"),
+              url: ENV.fetch("HOMEBREW_ARCHIVE_URL"),
+              sha256: ENV.fetch("HOMEBREW_ARCHIVE_SHA256")
+            )
+            File.write("dist/bon.rb", rendered)
+          '
+          ruby -c dist/bon.rb
+
+      - name: Check out tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          ref: main
+          path: tap
+
+      - name: Update tap formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tap/Formula
+          cp dist/bon.rb tap/Formula/bon.rb
+
+          cd tap
+          if git diff --quiet -- Formula/bon.rb; then
+            echo "Formula/bon.rb is already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/bon.rb
+          git commit -m "Update bon to ${HOMEBREW_VERSION}"
+          git push origin main
