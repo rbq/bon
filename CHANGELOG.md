@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.6] - 2026-06-22
+
+- Fixed release automation so tag builds publish the GitHub release and then update the Homebrew tap through reusable workflows.
+
 ## [0.1.5] - 2026-06-22
 
 - Added PDF input support to `bon simulate`, including page-by-page rasterization for multi-page PDFs.
