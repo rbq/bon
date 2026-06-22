@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.4] - 2026-06-22
+
+- Improved the README for installed users with a clearer installation note, first-run configuration flow, printer selection guidance, simulation examples, and printing examples that use user-owned files instead of repository fixtures.
+
 ## [0.1.3] - 2026-06-22
 
 - Added file path input support through both CLI arguments and newline-delimited stdin path lists.
