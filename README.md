@@ -2,19 +2,22 @@
 
 `bon` is a Crystal CLI for printing receipt-sized documents through CUPS/`lp`. It accepts PDF, PNG, JPEG, Typst, and LaTeX files, converts inputs to a temporary PDF only when needed, applies receipt-printer width handling, and sends the final document to a discovered or configured thermal printer.
 
-## Requirements
+## Installation
 
-Use `mise` so the same tool versions are used each time:
+Download or build the `bon` executable and place it somewhere on your `PATH`, for example `$HOME/.local/bin/bon`.
 
 ```sh
-mise install
+install -m 755 bon "$HOME/.local/bin/bon"
+bon --version
 ```
 
-Pinned development tools:
+A Homebrew formula is planned. Once it exists, installation will look like:
 
-- Crystal `1.20.2`
-- TinyTeX `2026.06`
-- Typst `0.14.2`
+```sh
+brew install <tap>/bon
+```
+
+## Requirements
 
 Runtime tools:
 
@@ -26,60 +29,66 @@ Runtime tools:
 
 ## Usage
 
-List CUPS queues:
+Create a config file from discovered printers:
 
 ```sh
-mise run run -- printer list
+bon init
 ```
 
-Dry-run a Typst receipt without submitting an `lp` job:
+Use `--global` to write `~/.config/bon/config.toml` instead of a local `./config.toml`:
 
 ```sh
-mise run run -- --dry-run spec/fixtures/examples/receipt-80mm.typ
+bon init --global
 ```
 
-Print one or more files:
+Inspect or edit the effective configuration:
 
 ```sh
-mise run run -- spec/fixtures/examples/variable-pages.pdf spec/fixtures/examples/receipt.png spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex
+bon config show
+bon config edit
+bon config check
+```
+
+List CUPS queues and select one explicitly when printing. To make a queue the default, set `printer.name` in the config opened by `bon config edit`:
+
+```sh
+bon printer list
+bon --printer EPSON_TM_m30III receipt.pdf
+```
+
+Render a mockup before printing. Simulation supports Typst, PNG, and JPEG inputs:
+
+```sh
+bon simulate receipt.typ
+bon simulate --paper-mm 58 --out-dir preview receipt.png
+```
+
+Print one or more files. Supported print inputs are PDF, PNG, JPEG, Typst, and LaTeX:
+
+```sh
+bon receipt.pdf
+bon receipt.png receipt.typ invoice.tex
+```
+
+Dry-run a print to inspect the external commands without submitting an `lp` job:
+
+```sh
+bon --dry-run receipt.pdf
 ```
 
 Print one document from stdin. Binary PDF, PNG, and JPEG input is auto-detected; Typst and LaTeX stdin must be typed explicitly:
 
 ```sh
-cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
-cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+cat receipt.pdf | bon --dry-run -
+cat receipt.typ | bon --dry-run --stdin-as typ -
 ```
 
 Print paths from stdin, one path per line. Stdin paths can be combined with normal CLI file arguments:
 
 ```sh
-printf '%s\n' spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex | mise run run -- --dry-run -
-printf '%s\n' spec/fixtures/examples/receipt.tex | mise run run -- --dry-run spec/fixtures/examples/variable-pages.pdf -
+printf '%s\n' receipt.typ invoice.tex | bon --dry-run -
+printf '%s\n' invoice.tex | bon --dry-run receipt.pdf -
 ```
-
-Validate and inspect configuration:
-
-```sh
-mise run run -- config check
-mise run run -- config show
-mise run run -- config edit
-```
-
-Render a receipt mockup:
-
-```sh
-mise run run -- simulate spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.png
-mise run run -- sim spec/fixtures/examples/receipt.jpg
-```
-
-Build the production executable:
-
-```sh
-mise run build
-```
-
-Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` copies that executable to `$HOME/.local/bin/bon`.
 
 ## CLI
 
@@ -241,6 +250,35 @@ For each input, `bon`:
 ## Development
 
 Repository-local example inputs live in `spec/fixtures/examples/`. They accompany the specs and cover supported input suffixes, 58 mm and 80 mm paper widths, variable-height multi-page documents, Typst, LaTeX, PDF, PNG, JPG, and JPEG paths.
+
+Use `mise` so the same tool versions are used each time:
+
+```sh
+mise install
+```
+
+Pinned development tools:
+
+- Crystal `1.20.2`
+- TinyTeX `2026.06`
+- Typst `0.14.2`
+
+Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` copies that executable to `$HOME/.local/bin/bon`.
+
+Smoke-test repository-local fixtures without submitting an `lp` job:
+
+```sh
+mise run run -- --dry-run spec/fixtures/examples/receipt-80mm.typ
+mise run run -- simulate spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.png
+```
+
+Exercise stdin handling with repository-local fixtures:
+
+```sh
+cat spec/fixtures/examples/variable-pages.pdf | mise run run -- --dry-run -
+cat spec/fixtures/examples/receipt-80mm.typ | mise run run -- --dry-run --stdin-as typ -
+printf '%s\n' spec/fixtures/examples/receipt-80mm.typ spec/fixtures/examples/receipt.tex | mise run run -- --dry-run -
+```
 
 Run specs:
 
