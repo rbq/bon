@@ -1,0 +1,9 @@
+<h1>bon print upload</h1>
+<p>Upload PDF, PNG, JPEG, Typst, or LaTeX documents. Files are printed through the same configured receipt-printer pipeline as <code>bon print</code>.</p>
+<form method="post" action="/print" enctype="multipart/form-data">
+  <label>Documents <input type="file" name="files[]" multiple required></label>
+  <% if token_configured %>
+    <label>Token <input type="password" name="token" autocomplete="current-password"></label>
+  <% end %>
+  <button type="submit">Print</button>
+</form>

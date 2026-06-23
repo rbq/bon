@@ -191,6 +191,7 @@ module Bon
           mb = parse_int(value, "--max-upload-mb")
           raise Error.new("--max-upload-mb must be positive") unless mb > 0
           options.max_upload_bytes = mb.to_i64 * 1024 * 1024
+          raise Error.new("--max-upload-mb is too large") if options.max_upload_bytes > Int32::MAX
         end
         parser.on("-h", "--help", "Show help") { show_help = true }
       end
@@ -203,6 +204,7 @@ module Bon
 
       raise Error.new("--port must be between 1 and 65535") unless options.port >= 1 && options.port <= 65_535
       raise Error.new("--max-upload-mb must be positive") unless options.max_upload_bytes > 0
+      raise Error.new("--max-upload-mb is too large") if options.max_upload_bytes > Int32::MAX
 
       Web.run(options, @output_io, @error_io)
       0

@@ -137,12 +137,9 @@ describe Bon::Web do
 end
 
 private def with_web_server(options = Bon::Web::Options.new(host: "127.0.0.1", port: 0), output_io : IO = IO::Memory.new, error_io : IO = IO::Memory.new, & : String ->) : Nil
-  app = Bon::Web::Application.new(options, output_io, error_io)
-  server = HTTP::Server.new do |context|
-    app.call(context)
-  end
+  server = Bon::Web::Application.test_server(options, output_io, error_io)
   address = server.bind_tcp(options.host, options.port)
-  fiber = spawn { server.listen }
+  spawn { server.listen }
   begin
     yield "http://#{address.address}:#{address.port}"
   ensure
