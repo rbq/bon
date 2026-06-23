@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7] - 2026-06-23
+
+- Fixed Homebrew tap release automation so published releases can update `rbq/tap/bon` reliably.
+- Documented Homebrew installation with `brew install rbq/tap/bon`.
+- Added a local `mise run uninstall`/`bin/uninstall` helper that asks before removing only `$HOME/.local/bin/bon` and leaves package-manager installs untouched.
+- Added confirmation before local `mise run install` overwrites or installs `$HOME/.local/bin/bon`.
+
 ## [0.1.6] - 2026-06-22
 
 - Fixed release automation so tag builds publish the GitHub release and then update the Homebrew tap through reusable workflows.
