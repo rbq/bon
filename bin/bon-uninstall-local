@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+target="${HOME}/.local/bin/bon"
+
+confirm() {
+  prompt="$1"
+  printf '%s [y/N] ' "$prompt"
+  IFS= read -r answer
+  case "$answer" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ -L "$target" ]; then
+  printf 'error: refusing to remove symlink: %s\n' "$target" >&2
+  printf 'If this points to a package-manager install, uninstall it with that package manager instead.\n' >&2
+  exit 1
+fi
+
+if [ ! -e "$target" ]; then
+  found="$(command -v bon 2>/dev/null || true)"
+  if [ -n "$found" ]; then
+    printf 'No bon executable found at %s.\n' "$target"
+    printf 'Found bon at %s; leaving it untouched because it was not installed by this project-local installer.\n' "$found"
+  else
+    printf 'No bon executable found at %s.\n' "$target"
+  fi
+  exit 0
+fi
+
+if [ ! -f "$target" ]; then
+  printf 'error: refusing to remove non-regular file: %s\n' "$target" >&2
+  exit 1
+fi
+
+if ! confirm "Remove bon executable at ${target}?"; then
+  printf 'Uninstall cancelled.\n'
+  exit 0
+fi
+
+rm "$target"
+printf 'Removed %s\n' "$target"

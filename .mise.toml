@@ -28,7 +28,11 @@ run = "mkdir -p bin && crystal build src/bon.cr -o bin/bon-debug"
 
 [tasks.install]
 description = "Build and install the production bon executable"
-run = "mkdir -p bin && rm -f bin/bon-release.dwarf && crystal build src/bon.cr --release --no-debug -o bin/bon-release && mkdir -p \"$HOME/.local/bin\" && cp bin/bon-release \"$HOME/.local/bin/bon\" && chmod 755 \"$HOME/.local/bin/bon\""
+run = "mise run build && bin/bon-install-local"
+
+[tasks.uninstall]
+description = "Remove the project-local bon executable from ~/.local/bin"
+run = "bin/bon-uninstall-local"
 
 [tasks.spec]
 description = "Run Crystal specs"

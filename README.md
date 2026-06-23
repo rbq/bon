@@ -4,18 +4,20 @@
 
 ## Installation
 
-Download or build the `bon` executable and place it somewhere on your `PATH`, for example `$HOME/.local/bin/bon`.
+Install with Homebrew:
+
+```sh
+brew install rbq/tap/bon
+```
+
+Or download or build the `bon` executable and place it somewhere on your `PATH`, for example `$HOME/.local/bin/bon`.
 
 ```sh
 install -m 755 bon "$HOME/.local/bin/bon"
 bon --version
 ```
 
-A Homebrew formula is planned. Once it exists, installation will look like:
-
-```sh
-brew install <tap>/bon
-```
+When developing from this repository, `mise run install` builds `bin/bon-release`, asks for confirmation, and copies it to `$HOME/.local/bin/bon`. `mise run uninstall` asks for confirmation before removing only that project-local path; it leaves package-manager installs such as Homebrew-owned `bon` executables untouched.
 
 ## Requirements
 
@@ -265,7 +267,7 @@ Pinned development tools:
 - TinyTeX `2026.06`
 - Typst `0.14.2`
 
-Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` copies that executable to `$HOME/.local/bin/bon`.
+Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` asks for confirmation before copying that executable to `$HOME/.local/bin/bon`, and `mise run uninstall` asks before removing only that project-local executable. The generated stubs `bin/install` and `bin/uninstall` expose those tasks as local shell aliases.
 
 Smoke-test repository-local fixtures without submitting an `lp` job:
 

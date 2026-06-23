@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+release="bin/bon-release"
+target_dir="${HOME}/.local/bin"
+target="${target_dir}/bon"
+
+confirm() {
+  prompt="$1"
+  printf '%s [y/N] ' "$prompt"
+  IFS= read -r answer
+  case "$answer" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ ! -x "$release" ]; then
+  printf 'error: expected built executable at %s\n' "$release" >&2
+  exit 1
+fi
+
+if [ -e "$target" ] && [ ! -f "$target" ]; then
+  printf 'error: refusing to overwrite non-regular file: %s\n' "$target" >&2
+  exit 1
+fi
+
+if [ -L "$target" ]; then
+  printf 'error: refusing to overwrite symlink: %s\n' "$target" >&2
+  exit 1
+fi
+
+if [ -e "$target" ]; then
+  message="Install bon to ${target}, replacing the existing file?"
+else
+  message="Install bon to ${target}?"
+fi
+
+if ! confirm "$message"; then
+  printf 'Install cancelled.\n'
+  exit 0
+fi
+
+mkdir -p "$target_dir"
+cp "$release" "$target"
+chmod 755 "$target"
+printf 'Installed bon to %s\n' "$target"
