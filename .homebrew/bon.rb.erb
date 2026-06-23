@@ -11,6 +11,7 @@ class Bon < Formula
   depends_on "ghostscript"
 
   def install
+    bin.mkpath
     system "crystal", "build", "src/bon.cr", "--release", "--no-debug", "-o", bin/"bon"
   end
 
