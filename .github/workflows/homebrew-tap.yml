@@ -112,13 +112,13 @@ jobs:
           cp dist/bon.rb tap/Formula/bon.rb
 
           cd tap
-          if git diff --quiet -- Formula/bon.rb; then
+          git add Formula/bon.rb
+          if git diff --cached --quiet -- Formula/bon.rb; then
             echo "Formula/bon.rb is already up to date."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/bon.rb
           git commit -m "Update bon to ${HOMEBREW_VERSION}"
           git push origin main
