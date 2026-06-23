@@ -27,7 +27,7 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify tap token access
         shell: bash
@@ -97,7 +97,7 @@ jobs:
           ruby -c dist/bon.rb
 
       - name: Check out tap repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}

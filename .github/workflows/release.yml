@@ -21,7 +21,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Extract changelog entry
         shell: bash
