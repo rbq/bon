@@ -118,3 +118,129 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update bon to ${HOMEBREW_VERSION}"
           git push origin main
+
+  build-bottles:
+    name: Build bottle ${{ matrix.artifact_suffix }}
+    needs: publish
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            artifact_suffix: macos-arm64
+          - runner: macos-15-intel
+            artifact_suffix: macos-x86_64
+          - runner: ubuntu-24.04
+            artifact_suffix: linux-x86_64
+    env:
+      HOMEBREW_TAP: rbq/tap
+      HOMEBREW_TAP_REPOSITORY: rbq/homebrew-tap
+      RELEASE_TAG: ${{ inputs.tag }}
+      BOTTLE_ROOT_URL: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Build bottle
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          eval "$(brew shellenv)"
+
+          git config --global \
+            url."https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
+          brew update --quiet
+          brew tap "$HOMEBREW_TAP" "https://github.com/${HOMEBREW_TAP_REPOSITORY}.git"
+
+          tap_dir="$(brew --repository "$HOMEBREW_TAP")"
+          git -C "$tap_dir" fetch origin main
+          git -C "$tap_dir" checkout main
+          git -C "$tap_dir" reset --hard origin/main
+
+          brew install --build-bottle "$HOMEBREW_TAP/bon"
+          brew test "$HOMEBREW_TAP/bon"
+          brew bottle --json --root-url "$BOTTLE_ROOT_URL" "$HOMEBREW_TAP/bon"
+
+          mkdir -p bottles
+          mv ./*.bottle.tar.gz ./*.bottle.json bottles/
+
+      - name: Upload bottle artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: homebrew-bottle-${{ matrix.artifact_suffix }}
+          path: bottles/*
+          if-no-files-found: error
+
+  publish-bottles:
+    name: Publish bottles
+    needs: build-bottles
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      HOMEBREW_TAP: rbq/tap
+      HOMEBREW_TAP_REPOSITORY: rbq/homebrew-tap
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Download bottle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: homebrew-bottle-*
+          path: bottles
+          merge-multiple: true
+
+      - name: Upload bottles to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release upload "$RELEASE_TAG" bottles/*.bottle.tar.gz --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Merge bottle metadata into tap formula
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          eval "$(brew shellenv)"
+
+          git config --global \
+            url."https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
+          brew update --quiet
+          brew tap "$HOMEBREW_TAP" "https://github.com/${HOMEBREW_TAP_REPOSITORY}.git"
+
+          tap_dir="$(brew --repository "$HOMEBREW_TAP")"
+          git -C "$tap_dir" fetch origin main
+          git -C "$tap_dir" checkout main
+          git -C "$tap_dir" reset --hard origin/main
+
+          cd "$tap_dir"
+          brew bottle --merge --write --no-commit --no-rebuild "$GITHUB_WORKSPACE"/bottles/*.bottle.json
+
+          git add Formula/bon.rb
+          if git diff --cached --quiet -- Formula/bon.rb; then
+            echo "Formula/bon.rb bottle block is already up to date."
+            exit 0
+          fi
+
+          version="${RELEASE_TAG#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add bon ${version} bottles"
+          git push origin main

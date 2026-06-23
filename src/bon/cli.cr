@@ -4,7 +4,9 @@ require "file_utils"
 require "./config"
 require "./cups"
 require "./document"
+require "./print_job"
 require "./simulate"
+require "./web"
 
 module Bon
   class Cli
@@ -37,6 +39,8 @@ module Bon
         run_printer(argv)
       when "config"
         run_config(argv)
+      when "web"
+        run_web(argv)
       else
         raise Error.new("Unknown command: #{command}")
       end
@@ -55,7 +59,7 @@ module Bon
         {"config", argv[1..]}
       elsif first == "i"
         {"init", argv[1..]}
-      elsif first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config"
+      elsif first == "print" || first == "simulate" || first == "init" || first == "printer" || first == "config" || first == "web"
         {first.not_nil!, argv[1..]}
       else
         {"print", argv}
@@ -130,6 +134,7 @@ module Bon
                  bon printer [list]
                  bon config|c <check|show|edit>
                  bon init|i [options]
+                 bon web [options]
 
           Commands:
             print,p    Print files, stdin document data, or stdin path lists. This is the default command.
@@ -139,6 +144,7 @@ module Bon
             printer    List discovered CUPS printer queues.
             config,c   Validate, show, or edit configuration.
             init,i     Create or refresh a config file from printer discovery.
+            web        Start an HTTP upload printing server.
 
           Print options:
           TEXT
@@ -164,6 +170,42 @@ module Bon
           @files.concat(after_dash)
         end
       end
+    end
+
+    private def run_web(argv : Array(String)) : Int32
+      options = Web::Options.new(token: ENV["BON_WEB_TOKEN"]?)
+      show_help = false
+      parser = OptionParser.new do |parser|
+        parser.banner = <<-TEXT
+          Usage: bon web [options]
+
+          Starts an HTTP upload printing server. Uploads use the effective bon config
+          and the same print pipeline as bon print.
+
+          Web options:
+          TEXT
+        parser.on("--host=HOST", "Bind address, default #{Web::DEFAULT_HOST}") { |value| options.host = value }
+        parser.on("--port=PORT", "Bind port, default #{Web::DEFAULT_PORT}") { |value| options.port = parse_int(value, "--port") }
+        parser.on("--token=TOKEN", "Require upload token; overrides BON_WEB_TOKEN") { |value| options.token = value }
+        parser.on("--max-upload-mb=N", "Maximum request size in MiB, default #{Web::DEFAULT_MAX_UPLOAD_MB}") do |value|
+          mb = parse_int(value, "--max-upload-mb")
+          raise Error.new("--max-upload-mb must be positive") unless mb > 0
+          options.max_upload_bytes = mb.to_i64 * 1024 * 1024
+        end
+        parser.on("-h", "--help", "Show help") { show_help = true }
+      end
+      parser.parse(argv)
+
+      if show_help
+        @output_io.puts(parser)
+        return 0
+      end
+
+      raise Error.new("--port must be between 1 and 65535") unless options.port >= 1 && options.port <= 65_535
+      raise Error.new("--max-upload-mb must be positive") unless options.max_upload_bytes > 0
+
+      Web.run(options, @output_io, @error_io)
+      0
     end
 
     private def run_printer(argv : Array(String)) : Int32
@@ -573,28 +615,8 @@ module Bon
     end
 
     private def print_documents(files : Array(String), printer : String, config : Config) : Nil
-      # Fail fast on unsupported driver options before doing any rasterization.
-      supported = Cups.driver_options(printer)
-      if supported
-        Cups.validate_against!(printer, config.cups_options, supported)
-        Cups.validate_against!(printer, @cli_options, supported)
-      end
-
-      with_temp_dir("bon-cups-") do |temp_dir|
-        index = 0
-        files.each do |source|
-          expand_print_source(source, temp_dir).each do |resolved_source|
-            index += 1
-            document = Document.prepare(resolved_source, temp_dir, index, config, @no_crop, config.cups_dry_run, @output_io, @error_io)
-            document.pages.each do |page|
-              options = Cups.build_options(config, page.size, @cli_options)
-              Cups.validate_against!(printer, options, supported) if supported
-              command = Cups.lp_command(printer, config.cups_copies, options, page.path)
-              Command.run(command, "CUPS printing failed for #{source}", config.cups_dry_run, false, @output_io, @error_io)
-            end
-          end
-        end
-      end
+      resolver = ->(source : String, temp_dir : String) { expand_print_source(source, temp_dir) }
+      PrintJob.run(files, printer, config, @no_crop, @cli_options, @output_io, @error_io, resolver)
     end
 
     private def margins_command?(files : Array(String)) : Bool
@@ -602,7 +624,7 @@ module Bon
     end
 
     private def with_margins_typ_source(& : String -> T) : T forall T
-      with_temp_dir("bon-margins-") do |temp_dir|
+      PrintJob.with_temp_dir("bon-margins-") do |temp_dir|
         source = File.join(temp_dir, "margins.typ")
         File.write(source, MARGINS_TYP)
         yield source
@@ -661,26 +683,6 @@ module Bon
       return ext if Document::SUPPORTED_SUFFIXES.includes?(ext)
 
       raise Error.new("--stdin-format must be one of: pdf, png, jpg, jpeg, typ, tex")
-    end
-
-    private def with_temp_dir(prefix : String, & : String -> T) : T forall T
-      base = Dir.tempdir
-      path = ""
-      100.times do
-        candidate = File.join(base, "#{prefix}#{Process.pid}-#{Time.utc.to_unix_ns}-#{Random.rand(1_000_000)}")
-        unless Dir.exists?(candidate) || File.exists?(candidate)
-          path = candidate
-          Dir.mkdir(candidate)
-          break
-        end
-      end
-      raise Error.new("Could not create temporary directory") if path.empty?
-
-      begin
-        yield path
-      ensure
-        FileUtils.rm_rf(path) unless path.empty?
-      end
     end
 
     private def help_requested?(argv : Array(String)) : Bool

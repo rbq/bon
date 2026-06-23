@@ -22,6 +22,7 @@ describe Bon::Cli do
     help.should contain("bon printer [list]")
     help.should contain("bon config|c <check|show|edit>")
     help.should contain("bon init|i [options]")
+    help.should contain("bon web [options]")
     help.should contain("print,p    Print files, stdin document data, or stdin path lists")
     help.should contain("margins    Print the built-in 10 mm margin calibration sheet")
     help.should contain("simulate   Render receipt mockups")
@@ -29,6 +30,7 @@ describe Bon::Cli do
     help.should contain("printer    List discovered CUPS printer queues")
     help.should contain("config,c   Validate, show, or edit configuration")
     help.should contain("init,i     Create or refresh a config file")
+    help.should contain("web        Start an HTTP upload printing server")
     help.should contain("--raster-threshold=N")
     help.should contain("--raster-dither=MODE")
     help.should contain("-p NAME, --printer=NAME")
@@ -53,6 +55,35 @@ describe Bon::Cli do
     help.should contain("-w N, --width=N")
     help.should contain("-u, --no-crop")
     help.should contain("--background-tint=HEX")
+  end
+
+  it "documents web options in web help" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    status = Bon::Cli.run(["web", "--help"], stdout, stderr)
+
+    status.should eq(0)
+    stderr.to_s.should eq("")
+    help = stdout.to_s
+    help.should contain("Usage: bon web [options]")
+    help.should contain("--host=HOST")
+    help.should contain("--port=PORT")
+    help.should contain("--token=TOKEN")
+    help.should contain("--max-upload-mb=N")
+  end
+
+  it "rejects invalid web options" do
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    Bon::Cli.run(["web", "--port", "0"], stdout, stderr).should eq(2)
+    stderr.to_s.should contain("error: --port must be between 1 and 65535")
+
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+    Bon::Cli.run(["web", "--max-upload-mb", "0"], stdout, stderr).should eq(2)
+    stderr.to_s.should contain("error: --max-upload-mb must be positive")
   end
 
   it "shows root help and version without loading invalid local config" do
@@ -596,7 +627,7 @@ describe Bon::Cli do
       stdin = IO::Memory.new("#set page(width: 80mm, height: 300pt)\nHello\n")
 
       with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
-          status = Bon::Cli.run(["--dry-run", "--stdin-format", "typ", "-"], stdout, stderr, stdin)
+        status = Bon::Cli.run(["--dry-run", "--stdin-format", "typ", "-"], stdout, stderr, stdin)
 
         status.should eq(0)
         stderr.to_s.should eq("")

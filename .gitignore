@@ -1,5 +1,6 @@
-*.dSYM/
+/.bundle/
 /.crystal/
+*.dSYM/
 /*.pdf
 /*.png
 /bin/bon-debug

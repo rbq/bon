@@ -55,6 +55,8 @@ jobs:
   homebrew-tap:
     name: Publish Homebrew formula
     needs: publish
+    permissions:
+      contents: write
     uses: ./.github/workflows/homebrew-tap.yml
     with:
       tag: ${{ inputs.tag }}

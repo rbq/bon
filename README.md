@@ -93,6 +93,14 @@ printf '%s\n' receipt.typ invoice.tex | bon --dry-run -
 printf '%s\n' invoice.tex | bon --dry-run receipt.pdf -
 ```
 
+Start a browser-based upload server. By default it listens on `0.0.0.0:8080`; use `--host 127.0.0.1` to keep it local-only. Uploads use the effective config and the same print pipeline as `bon print`:
+
+```sh
+bon web --host 127.0.0.1 --port 8080
+BON_WEB_TOKEN=secret bon web
+curl -H 'X-Bon-Token: secret' -F 'files[]=@receipt.pdf' http://127.0.0.1:8080/print
+```
+
 ## CLI
 
 ```text
@@ -104,6 +112,7 @@ Usage: bon [print] [options] FILE...|-
        bon printer [list]
        bon config|c <check|show|edit>
        bon init|i [options]
+       bon web [options]
 ```
 
 Commands:
@@ -118,6 +127,7 @@ Commands:
 - `config show` - show the effective merged config, including built-in defaults.
 - `config edit` - open the local or global config in `$VISUAL`, `$EDITOR`, or `vi`, then validate it.
 - `init` - create or refresh a config file from printer discovery. `i` is a short alias.
+- `web [options]` - start an HTTP upload printing server with a browser form at `/`, multipart upload endpoint at `/print`, and health check at `/health`.
 
 Print options:
 
@@ -159,6 +169,16 @@ Init options:
 - `--global` - write the global config instead of local `./bon.toml`.
 - `--force` - regenerate the config from the default template.
 - `--no-interactive` - avoid prompting and use deterministic printer selection.
+
+Web options:
+
+- `--host HOST` - bind address, default `0.0.0.0`.
+- `--port PORT` - bind port, default `8080`.
+- `--token TOKEN` - require an upload token; overrides `BON_WEB_TOKEN`.
+- `--max-upload-mb N` - maximum multipart request size, default `25` MiB.
+- `-h, --help` - show web command help.
+
+`GET /` serves a compact HTML upload form with one multiple-file input. `POST /print` accepts multipart uploads from `file` or repeated `files[]` fields and preserves upload order. If token auth is configured with `--token` or `BON_WEB_TOKEN`, uploads must provide `Authorization: Bearer <token>`, `X-Bon-Token: <token>`, or a form field named `token`. If no token is configured, uploads are unauthenticated; be careful with the default `0.0.0.0` bind address on shared networks. JSON clients receive responses such as `{ "ok": true, "files": 2, "message": "submitted 2 file(s)" }`; browser form submissions receive an HTML result page. Print batches are serialized in-process, so concurrent upload requests wait for the active batch to finish.
 
 ## Configuration
 
@@ -237,7 +257,7 @@ Printer-scoped overrides apply only after a print queue has been selected. Suppo
 For each input, `bon`:
 
 1. Creates a temporary working directory outside the project tree.
-2. Resolves and validates path inputs, expands stdin `-` into newline-delimited paths when applicable, or materializes stdin document data into a typed temporary file before validation.
+2. Resolves and validates path inputs, expands stdin `-` into newline-delimited paths when applicable, materializes stdin document data into a typed temporary file, or stores web uploads as temporary files with their uploaded suffix before validation.
 3. Converts Typst and LaTeX inputs to PDF.
 4. Sends PNG/JPEG inputs directly to CUPS when they fit the printable width, based on `render.image_ppi`.
 5. Scans discoverable PDF `/CropBox` and `/MediaBox` entries on a best-effort basis, or computes image physical size from pixels and PPI. This is not a full PDF parser, so compressed/object-stream page boxes may not be visible.
