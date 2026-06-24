@@ -4,7 +4,7 @@
 
 ## Installation
 
-Install with Homebrew:
+Install with Homebrew. Published releases provide Homebrew bottles for macOS ARM, macOS x64, and Linux x64, with source builds as the fallback when no matching bottle is available:
 
 ```sh
 brew install rbq/tap/bon
@@ -178,7 +178,7 @@ Web options:
 - `--max-upload-mb N` - maximum multipart request size, default `25` MiB.
 - `-h, --help` - show web command help.
 
-`bon web` is implemented with Kemal and ECR templates under `src/bon/web/templates/`, so the upload UI can grow layout and styling without changing the print service. `GET /` serves a compact HTML upload form with one multiple-file input. `POST /print` accepts multipart uploads from `file` or repeated `files[]` fields and preserves upload order. If token auth is configured with `--token` or `BON_WEB_TOKEN`, uploads must provide `Authorization: Bearer <token>`, `X-Bon-Token: <token>`, or a form field named `token`. If no token is configured, uploads are unauthenticated; be careful with the default `0.0.0.0` bind address on shared networks. JSON clients receive responses such as `{ "ok": true, "files": 2, "message": "submitted 2 file(s)" }`; browser form submissions receive an HTML result page. Print batches are serialized in-process, so concurrent upload requests wait for the active batch to finish.
+`GET /` serves a compact HTML upload form with one multiple-file input. `POST /print` accepts multipart uploads from `file` or repeated `files[]` fields and preserves upload order. If token auth is configured with `--token` or `BON_WEB_TOKEN`, uploads must provide `Authorization: Bearer <token>`, `X-Bon-Token: <token>`, or a form field named `token`. If no token is configured, uploads are unauthenticated; be careful with the default `0.0.0.0` bind address on shared networks. JSON clients receive responses such as `{ "ok": true, "files": 2, "message": "submitted 2 file(s)" }`; browser form submissions receive an HTML result page. Print batches are serialized in-process, so concurrent upload requests wait for the active batch to finish.
 
 ## Configuration
 
@@ -347,6 +347,6 @@ bin/release-tag 0.2.0
 git push origin v0.2.0
 ```
 
-CI starts from `.github/workflows/build.yml`, verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and calls the reusable `.github/workflows/release.yml` to publish the matching changelog section as the GitHub release body. After the release is published, release CI calls the reusable Homebrew tap workflow to render `.homebrew/bon.rb.erb`, compute the tag source archive SHA256, and update `Formula/bon.rb` in `rbq/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured for the repository.
+CI starts from `.github/workflows/build.yml`, verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and calls the reusable `.github/workflows/release.yml` to publish the matching changelog section as the GitHub release body. After the release is published, release CI calls the reusable Homebrew tap workflow to render `.homebrew/bon.rb.erb`, compute the tag source archive SHA256, and update `Formula/bon.rb` in `rbq/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured for the repository. The tap workflow then builds Homebrew bottles for macOS ARM, macOS x64, and Linux x64, uploads the bottle archives to the GitHub release, and merges the generated bottle metadata back into the tap formula.
 
-The implementation keeps shard dependencies minimal. Kemal provides the `bon web` route layer and ECR-backed upload UI; the print pipeline remains in project-local Crystal source under `src/`, with specs under `spec/`.
+The implementation intentionally avoids shard dependencies. Crystal source lives under `src/`, and specs live under `spec/`.
