@@ -191,7 +191,7 @@ jobs:
           brew bottle --json --root-url "$BOTTLE_ROOT_URL" "$HOMEBREW_TAP/bon"
 
           mkdir -p bottles
-          mv ./*.bottle.tar.gz ./*.bottle.json bottles/
+          mv ./*.bottle*.tar.gz ./*.bottle*.json bottles/
 
       - name: Upload bottle artifact
         uses: actions/upload-artifact@v7
