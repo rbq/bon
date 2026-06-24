@@ -44,6 +44,10 @@ jobs:
       - name: Set up mise tools
         uses: jdx/mise-action@v2
 
+      - name: Install shards on macOS
+        if: runner.os == 'macOS'
+        run: brew install crystal
+
       - name: Build release binary
         run: mise run build
 
