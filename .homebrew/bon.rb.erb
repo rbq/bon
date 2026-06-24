@@ -12,6 +12,7 @@ class Bon < Formula
 
   def install
     bin.mkpath
+    system "shards", "install", "--production"
     system "crystal", "build", "src/bon.cr", "--release", "--no-debug", "-o", bin/"bon"
   end
 

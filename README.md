@@ -287,7 +287,7 @@ Pinned development tools:
 - TinyTeX `2026.06`
 - Typst `0.14.2`
 
-Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Production builds are written to `bin/bon-release`; `mise run install` asks for confirmation before copying that executable to `$HOME/.local/bin/bon`, and `mise run uninstall` asks before removing only that project-local executable. The generated stubs `bin/install` and `bin/uninstall` expose those tasks as local shell aliases.
+Inside the project, mise prepends `./bin` to `PATH`, so `bon ...` resolves to the generated mise stub `bin/bon` and runs `crystal run src/bon.cr -- ...` from source. Build and spec tasks install Crystal shard dependencies before compiling. Production builds are written to `bin/bon-release`; `mise run install` asks for confirmation before copying that executable to `$HOME/.local/bin/bon`, and `mise run uninstall` asks before removing only that project-local executable. The generated stubs `bin/install` and `bin/uninstall` expose those tasks as local shell aliases.
 
 Smoke-test repository-local fixtures without submitting an `lp` job:
 
@@ -349,4 +349,4 @@ git push origin v0.2.0
 
 CI starts from `.github/workflows/build.yml`, verifies that the pushed tag matches `shard.yml`, builds release archives, includes `CHANGELOG.md` in each archive, and calls the reusable `.github/workflows/release.yml` to publish the matching changelog section as the GitHub release body. After the release is published, release CI calls the reusable Homebrew tap workflow to render `.homebrew/bon.rb.erb`, compute the tag source archive SHA256, and update `Formula/bon.rb` in `rbq/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured for the repository. The tap workflow then builds Homebrew bottles for macOS ARM, macOS x64, and Linux x64, uploads the bottle archives to the GitHub release, and merges the generated bottle metadata back into the tap formula.
 
-The implementation intentionally avoids shard dependencies. Crystal source lives under `src/`, and specs live under `spec/`.
+Crystal source lives under `src/`, specs live under `spec/`, and Kemal provides the `bon web` route layer and ECR-backed upload UI.

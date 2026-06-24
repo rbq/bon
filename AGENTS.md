@@ -11,7 +11,7 @@ This project builds the Crystal `bon` CLI. `bon` prints PDF, image, Typst, or La
 - Run `mise generate task-stubs` whenever mise task names are added, removed, or renamed.
 - Required and optional development tools are pinned in `.mise.toml`: Crystal `1.20.2`, git-cliff, TinyTeX `2026.06`, and Typst `0.14.2`.
 - Main development commands are `mise run spec`, `mise run build`, `mise run run -- --dry-run <file>`, `bin/release-check`, and local `bon --dry-run <file>` through the generated mise stub.
-- Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason.
+- Keep the Crystal implementation dependency-light. Avoid shard dependencies unless there is a concrete reason; Kemal is currently used for `bon web` routing and ECR-backed templates.
 
 ## Workflow Guidance
 
@@ -83,7 +83,7 @@ When modifying the application, keep all of the following in sync:
 - Printing uses `lp -d <queue> -n <copies> -o KEY=VALUE ... <document>`.
 - Print stdin uses `-` as a source marker. If `--stdin-format` is omitted and binary document detection fails, stdin is treated as a newline-delimited path list only when every non-empty line exists; those paths are expanded in place alongside CLI file arguments.
 - Stdin document data materializes into the per-job temporary directory, then routes through the same suffix-based `Document.prepare` pipeline as path inputs.
-- `bon web` starts a stdlib-only HTTP upload printing server. Defaults are `--host 0.0.0.0`, `--port 8080`, and `--max-upload-mb 25`; no persistent config keys are used for web settings.
+- `bon web` uses Kemal for HTTP routing and ECR templates in `src/bon/web/templates/` for the upload UI. Defaults are `--host 0.0.0.0`, `--port 8080`, and `--max-upload-mb 25`; no persistent config keys are used for web settings.
 - Web upload auth is optional. `--token` overrides `BON_WEB_TOKEN`; when configured, uploads may authenticate with `Authorization: Bearer <token>`, `X-Bon-Token: <token>`, or multipart form field `token`.
 - Web routes are `GET /` for the upload form, `POST /print` for multipart `file` or repeated `files[]` uploads, and `GET /health` for plain-text `ok`. Uploads are materialized into a per-request temp directory and must keep supported suffixes; never interpret uploads as stdin path lists.
 - Web print batches are serialized with an in-process mutex and then run through the shared `PrintJob` service, which owns CUPS driver validation, temp-dir cleanup, `Document.prepare`, per-page CUPS options, and `lp` submission.
