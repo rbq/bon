@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8] - 2026-06-24
+
+- Added `bon web`, an upload server for printing supported documents from a browser form or JSON client. Uploads use the same print pipeline as the CLI, support optional token authentication, and serialize print batches in-process.
+- Improved the web upload UI and routing with Kemal and ECR templates.
+- Added Homebrew bottle publication for macOS ARM, macOS x64, and Linux x64 so matching Homebrew installs can use prebuilt packages while retaining source-build fallback.
+- Fixed Homebrew tap automation issues around formula version audit rules, release archive checksums, and formula build output paths.
+- Updated GitHub Actions versions used by CI and release workflows.
+
 ## [0.1.7] - 2026-06-23
 
 - Fixed Homebrew tap release automation so published releases can update `rbq/tap/bon` reliably.
