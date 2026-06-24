@@ -180,6 +180,7 @@ jobs:
 
           brew update --quiet
           brew tap "$HOMEBREW_TAP" "https://github.com/${HOMEBREW_TAP_REPOSITORY}.git"
+          brew trust --formula "$HOMEBREW_TAP/bon"
 
           tap_dir="$(brew --repository "$HOMEBREW_TAP")"
           git -C "$tap_dir" fetch origin main
@@ -257,6 +258,7 @@ jobs:
 
           brew update --quiet
           brew tap "$HOMEBREW_TAP" "https://github.com/${HOMEBREW_TAP_REPOSITORY}.git"
+          brew trust --formula "$HOMEBREW_TAP/bon"
 
           tap_dir="$(brew --repository "$HOMEBREW_TAP")"
           git -C "$tap_dir" fetch origin main
