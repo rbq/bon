@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.10] - 2026-06-24
+
+- Added `bon web`, an upload server for printing supported documents from a browser form or JSON client. Uploads use the same print pipeline as the CLI, support optional token authentication, and serialize print batches in-process.
+- Added `--verbose` diagnostics for print and simulation processing so command execution and pipeline decisions can be inspected on stderr.
+- Improved the web upload UI and routing with Kemal and ECR templates.
+- Added Homebrew bottle publication for macOS ARM, macOS x64, and Linux x64 so matching Homebrew installs can use prebuilt packages while retaining source-build fallback.
+- Fixed clean CI, local build tasks, macOS release builds, and Homebrew source builds by installing Crystal shard dependencies before compiling or testing.
+- Fixed Homebrew tap automation issues around formula version audit rules, release archive checksums, and formula build output paths.
+- Updated GitHub Actions versions used by CI and release workflows.
+
 ## [0.1.9] - 2026-06-24
 
 - Added `bon web`, an upload server for printing supported documents from a browser form or JSON client. Uploads use the same print pipeline as the CLI, support optional token authentication, and serialize print batches in-process.
