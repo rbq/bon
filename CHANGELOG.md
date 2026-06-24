@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.11] - 2026-06-24
+
+- Fixed Homebrew bottle publication so bottle jobs set up Homebrew without rewriting the workflow workspace, allowing the tap workflow to build and merge macOS and Linux bottles after release publication.
+
 ## [0.1.10] - 2026-06-24
 
 - Added `bon web`, an upload server for printing supported documents from a browser form or JSON client. Uploads use the same print pipeline as the CLI, support optional token authentication, and serialize print batches in-process.
