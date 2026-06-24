@@ -240,7 +240,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh release upload "$RELEASE_TAG" bottles/*.bottle.tar.gz --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" bottles/*.bottle*.tar.gz --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Merge bottle metadata into tap formula
         shell: bash
@@ -264,7 +264,7 @@ jobs:
           git -C "$tap_dir" reset --hard origin/main
 
           cd "$tap_dir"
-          brew bottle --merge --write --no-commit --no-rebuild "$GITHUB_WORKSPACE"/bottles/*.bottle.json
+          brew bottle --merge --write --no-commit --no-rebuild "$GITHUB_WORKSPACE"/bottles/*.bottle*.json
 
           git add Formula/bon.rb
           if git diff --cached --quiet -- Formula/bon.rb; then
