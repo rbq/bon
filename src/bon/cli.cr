@@ -22,6 +22,7 @@ module Bon
       @cli_options = Hash(String, String).new
       @stdin_as = nil.as(String?)
       @no_crop = false
+      @verbose = false
       @show_help = false
       @show_version = false
     end
@@ -104,7 +105,9 @@ module Bon
       validate_stdin_sources(@files)
 
       queue = Cups.discover(config)
+      log_verbose("selected printer #{queue.name}")
       config.apply_printer_overrides!(queue.name)
+      log_verbose("applied printer-specific overrides for #{queue.name}")
       config.validate!
       if margins_command
         with_margins_typ_source { |source| print_documents([source], queue.name, config) }
@@ -119,6 +122,7 @@ module Bon
       @cli_options = Hash(String, String).new
       @stdin_as = nil.as(String?)
       @no_crop = false
+      @verbose = false
       @show_help = false
       @show_version = false
     end
@@ -163,6 +167,7 @@ module Bon
         parser.on("-f TYPE", "--stdin-format=TYPE", "Type for stdin document data: pdf, png, jpg, jpeg, typ, or tex") { |value| @stdin_as = normalize_stdin_type(value) }
         parser.on("-u", "--no-crop", "Do not center-crop pages wider than printable width") { @no_crop = true }
         parser.on("--dry-run", "Show external commands without sending lp jobs") { config.cups_dry_run = true }
+        parser.on("--verbose", "Explain processing steps and decisions") { @verbose = true }
         parser.on("-v", "--version", "Show version") { @show_version = true }
         parser.on("-h", "--help", "Show help") { @show_help = true }
         parser.unknown_args do |before_dash, after_dash|
@@ -451,6 +456,7 @@ module Bon
           options.out_dir = File.expand_path(value)
         end
         parser.on("--typst-bin=PATH", "Typst executable to use") { |value| options.typst_bin = value }
+        parser.on("--verbose", "Explain processing steps and decisions") { options.verbose = Verbose.new(true, @error_io) }
         parser.on("-h", "--help", "Show help") { show_help[0] = true }
         parser.unknown_args do |before_dash, after_dash|
           files.concat(before_dash)
@@ -618,7 +624,7 @@ module Bon
 
     private def print_documents(files : Array(String), printer : String, config : Config) : Nil
       resolver = ->(source : String, temp_dir : String) { expand_print_source(source, temp_dir) }
-      PrintJob.run(files, printer, config, @no_crop, @cli_options, @output_io, @error_io, resolver)
+      PrintJob.run(files, printer, config, @no_crop, @cli_options, @output_io, @error_io, resolver, Verbose.new(@verbose, @error_io))
     end
 
     private def margins_command?(files : Array(String)) : Bool
@@ -645,8 +651,10 @@ module Bon
       raise Error.new("stdin input is empty") if content.empty?
 
       ext = @stdin_as || detect_stdin_type(content.to_slice)
+      log_verbose("using --stdin-format=#{ext.not_nil![1..]}") if @stdin_as && ext
       unless ext
         paths = detect_stdin_paths(content)
+        log_verbose("treating stdin as #{paths.size} path#{paths.size == 1 ? "" : "s"}") if paths
         return paths if paths
       end
 
@@ -655,6 +663,7 @@ module Bon
       end
 
       path = File.join(temp_dir, "stdin#{ext}")
+      log_verbose("materializing stdin document data as #{path}")
       File.write(path, content)
       [path]
     end
@@ -685,6 +694,10 @@ module Bon
       return ext if Document::SUPPORTED_SUFFIXES.includes?(ext)
 
       raise Error.new("--stdin-format must be one of: pdf, png, jpg, jpeg, typ, tex")
+    end
+
+    private def log_verbose(message : String) : Nil
+      Verbose.new(@verbose, @error_io).log(message)
     end
 
     private def help_requested?(argv : Array(String)) : Bool

@@ -40,6 +40,7 @@ module Bon
       property background_tint : String
       property foreground_rgb : RGB
       property foreground_fade : Float64
+      property verbose : Verbose?
 
       def initialize(@format = "png",
                      @paper_mm = 80.0,
@@ -54,10 +55,11 @@ module Bon
                      @min_top_mm = DEFAULT_MIN_TOP_MM,
                      @min_bottom_mm = DEFAULT_MIN_BOTTOM_MM,
                      @out_dir = nil,
-                     @typst_bin = "typst",
-                     @background_tint = "#f5f1e0",
-                     @foreground_rgb = INK_RGB,
-                     @foreground_fade = DEFAULT_FOREGROUND_FADE)
+                      @typst_bin = "typst",
+                      @background_tint = "#f5f1e0",
+                      @foreground_rgb = INK_RGB,
+                      @foreground_fade = DEFAULT_FOREGROUND_FADE,
+                      @verbose = nil)
       end
     end
 
@@ -93,6 +95,7 @@ module Bon
       raise Error.new("simulate expects .pdf, .typ, .png, .jpg, or .jpeg inputs: #{source}") unless supported_input?(ext)
 
       source_width = physical_source_width_mm(source, ext, options)
+      options.verbose.try &.log("simulating #{source} as #{ext} input; source width #{format_mm(source_width)}mm")
       if source_width > options.paper_mm + PDF::CROP_EPSILON_PT * 25.4 / 72.0
         raise Error.new("Input width #{format_mm(source_width)}mm exceeds #{format_mm(options.paper_mm)}mm paper width: #{source}")
       end
@@ -102,14 +105,18 @@ module Bon
 
       case ext
       when ".pdf"
-        intermediate_pages = render_pdf_pages(source, temp_dir, basename, options.ppi, output_io, error_io)
+        options.verbose.try &.log("rendering PDF pages to PNG at #{options.ppi} PPI")
+        intermediate_pages = render_pdf_pages(source, temp_dir, basename, options.ppi, output_io, error_io, options.verbose)
       when ".typ"
-        intermediate_pages = render_typst_pages(options.typst_bin, source, temp_dir, basename, options.ppi, Typst.root_for(source), output_io, error_io).map { |path| {path, source_width} }
+        options.verbose.try &.log("rendering Typst pages to PNG at #{options.ppi} PPI")
+        intermediate_pages = render_typst_pages(options.typst_bin, source, temp_dir, basename, options.ppi, Typst.root_for(source), output_io, error_io, options.verbose).map { |path| {path, source_width} }
       when ".jpg", ".jpeg"
         intermediate_png = File.join(temp_dir, "#{basename}-content.png")
+        options.verbose.try &.log("wrapping JPEG in Typst to render PNG at #{options.ppi} PPI")
         render_jpeg_to_png(source, intermediate_png, temp_dir, options, output_io, error_io)
         intermediate_pages << {intermediate_png, source_width}
       else
+        options.verbose.try &.log("using PNG input directly for mockup content")
         intermediate_pages << {source, source_width}
       end
 
@@ -119,8 +126,15 @@ module Bon
         FileUtils.mkdir_p(File.dirname(output))
         mockup_png = options.format == "png" ? output : File.join(temp_dir, "#{basename}-mockup-#{page_number}.png")
 
-        simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width_mm(page_width, options), options.mockup_ppi, effective_top_mm(options), effective_bottom_mm(options), seed_for(source) + page_number, page_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
-        convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io) unless options.format == "png"
+        content_width = content_width_mm(page_width, options)
+        if content_width < page_width
+          options.verbose.try &.log("center-cropping simulated content from #{format_mm(page_width)}mm to #{format_mm(content_width)}mm")
+        else
+          options.verbose.try &.log("using simulated content width #{format_mm(content_width)}mm without cropping")
+        end
+        options.verbose.try &.log("rendering mockup PNG at #{options.mockup_ppi} PPI with #{format_mm(effective_top_mm(options))}mm top and #{format_mm(effective_bottom_mm(options))}mm bottom paper")
+        simulate_png(intermediate_png, mockup_png, options.paper_mm, content_width, options.mockup_ppi, effective_top_mm(options), effective_bottom_mm(options), seed_for(source) + page_number, page_width, paper_rgb, options.foreground_rgb, options.foreground_fade)
+        convert_mockup(options.typst_bin, mockup_png, output, options.format, options.paper_mm, options.mockup_ppi, temp_dir, output_io, error_io, options.verbose) unless options.format == "png"
         output
       end
     end
@@ -297,27 +311,28 @@ module Bon
       }
     end
 
-    private def self.convert_mockup(typst_bin : String, mockup_png : String, output : String, format : String, paper_mm : Float64, ppi : Int32, temp_dir : String, output_io : IO, error_io : IO) : Nil
+    private def self.convert_mockup(typst_bin : String, mockup_png : String, output : String, format : String, paper_mm : Float64, ppi : Int32, temp_dir : String, output_io : IO, error_io : IO, verbose : Verbose? = nil) : Nil
       raster = read_png(mockup_png)
       height_mm = raster.height.to_f64 / ppi * 25.4
+      verbose.try &.log("converting mockup PNG to #{format.upcase} with Typst")
       wrapper = File.join(temp_dir, "mockup-wrapper.typ")
       File.write(wrapper, String.build do |io|
         io << "#set page(width: #{paper_mm}mm, height: #{height_mm}mm, margin: 0mm)\n"
         io << "#image(\"#{File.basename(mockup_png).gsub("\\", "\\\\").gsub("\"", "\\\"")}\", width: #{paper_mm}mm)\n"
       end)
-      run_typst(typst_bin, wrapper, output, format, ppi, temp_dir, output_io, error_io)
+      run_typst(typst_bin, wrapper, output, format, ppi, temp_dir, output_io, error_io, verbose)
     end
 
-    private def self.render_typst_pages(typst_bin : String, source : String, temp_dir : String, basename : String, ppi : Int32, root : String, output_io : IO, error_io : IO) : Array(String)
+    private def self.render_typst_pages(typst_bin : String, source : String, temp_dir : String, basename : String, ppi : Int32, root : String, output_io : IO, error_io : IO, verbose : Verbose? = nil) : Array(String)
       output_pattern = File.join(temp_dir, "#{basename}-content-{p}.png")
-      run_typst(typst_bin, source, output_pattern, "png", ppi, root, output_io, error_io)
+      run_typst(typst_bin, source, output_pattern, "png", ppi, root, output_io, error_io, verbose)
       page_pattern = output_pattern.gsub("{p}", "*")
       pages = Dir.glob(page_pattern).sort_by { |path| page_number_from_path(path) || Int32::MAX }
       raise Error.new("Typst simulation render did not produce PNG pages for #{source}") if pages.empty?
       pages
     end
 
-    private def self.render_pdf_pages(source : String, temp_dir : String, basename : String, ppi : Int32, output_io : IO, error_io : IO) : Array(Tuple(String, Float64))
+    private def self.render_pdf_pages(source : String, temp_dir : String, basename : String, ppi : Int32, output_io : IO, error_io : IO, verbose : Verbose? = nil) : Array(Tuple(String, Float64))
       sizes = PDF.page_sizes(source)
       gs = Command.require_executable("gs")
 
@@ -340,12 +355,12 @@ module Bon
           "-dFIXEDMEDIA",
           "-sOutputFile=#{output}",
           source,
-        ], "PDF simulation render failed for #{source} page #{page_number}", false, false, output_io, error_io)
+        ], "PDF simulation render failed for #{source} page #{page_number}", false, false, output_io, error_io, verbose)
         {output, size.width * 25.4 / 72.0}
       end
     end
 
-    private def self.run_typst(typst_bin : String, input : String, output : String, format : String, ppi : Int32, root : String, output_io : IO, error_io : IO) : Nil
+    private def self.run_typst(typst_bin : String, input : String, output : String, format : String, ppi : Int32, root : String, output_io : IO, error_io : IO, verbose : Verbose? = nil) : Nil
       typst = typst_bin.includes?(File::SEPARATOR) ? typst_bin : Command.require_executable(typst_bin)
       Command.run([
         typst,
@@ -358,7 +373,7 @@ module Bon
         format,
         input,
         output,
-      ], "Typst simulation render failed for #{input}", false, false, output_io, error_io)
+      ], "Typst simulation render failed for #{input}", false, false, output_io, error_io, verbose)
     end
 
     private def self.render_jpeg_to_png(source : String, output : String, temp_dir : String, options : Options, output_io : IO, error_io : IO) : Nil
@@ -372,7 +387,7 @@ module Bon
         io << "#set text(size: 0pt)\n"
         io << "#image(\"#{typst_escape(image_name)}\", width: #{PDF.format_points(size.width)}pt)\n"
       end)
-      run_typst(options.typst_bin, wrapper, output, "png", options.ppi, temp_dir, output_io, error_io)
+      run_typst(options.typst_bin, wrapper, output, "png", options.ppi, temp_dir, output_io, error_io, options.verbose)
     end
 
     private def self.physical_source_width_mm(source : String, ext : String, options : Options) : Float64

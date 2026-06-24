@@ -1,10 +1,26 @@
 module Bon
+  class Verbose
+    def initialize(@enabled = false, @io : IO = STDERR)
+    end
+
+    def enabled? : Bool
+      @enabled
+    end
+
+    def log(message : String) : Nil
+      return unless @enabled
+
+      @io.puts("[verbose] #{message}")
+    end
+  end
+
   module Command
     def self.require_executable(name : String) : String
       Process.find_executable(name) || raise Error.new("Required command not found: #{name}")
     end
 
-    def self.run(command : Array(String), failure_message : String, dry_run = false, execute_during_dry_run = false, output_io : IO = STDOUT, error_io : IO = STDERR) : Nil
+    def self.run(command : Array(String), failure_message : String, dry_run = false, execute_during_dry_run = false, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : Nil
+      verbose.try &.log("#{dry_run && !execute_during_dry_run ? "would run" : "running"} #{shell_join(command)}")
       output_io.puts(shell_join(command)) if dry_run
       return if dry_run && !execute_during_dry_run
 
@@ -16,7 +32,8 @@ module Bon
       raise Error.new(failure_message) unless status.success?
     end
 
-    def self.run_capture(command : Array(String), failure_message : String) : String
+    def self.run_capture(command : Array(String), failure_message : String, verbose : Verbose? = nil) : String
+      verbose.try &.log("running #{shell_join(command)}")
       stdout = IO::Memory.new
       stderr = IO::Memory.new
       status = Process.run(command[0], command[1..], output: stdout, error: stderr)
@@ -24,7 +41,8 @@ module Bon
       stdout.to_s
     end
 
-    def self.try_run(command : Array(String), output_io : IO = STDOUT, error_io : IO = STDERR) : Bool
+    def self.try_run(command : Array(String), output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : Bool
+      verbose.try &.log("running #{shell_join(command)}")
       stdout = IO::Memory.new
       stderr = IO::Memory.new
       status = Process.run(command[0], command[1..], output: stdout, error: stderr)

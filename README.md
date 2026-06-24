@@ -139,10 +139,13 @@ Print options:
 - `-f, --stdin-format TYPE` - type for stdin document data: `pdf`, `png`, `jpg`, `jpeg`, `typ`, or `tex`.
 - `-u, --no-crop` - do not center-crop pages wider than printable width.
 - `--dry-run` - show external commands without submitting the final print job.
+- `--verbose` - explain processing steps, relevant decisions, and external commands on stderr.
 - `-v, --version` - show the CLI version from `shard.yml`.
 - `-h, --help` - show usage help.
 
 If no files are passed to the print command, `bon` fails with usage help. Use `-` to read from stdin. PDF, PNG, and JPEG stdin are auto-detected from binary signatures; pass `--stdin-format typ` or `--stdin-format tex` for Typst or LaTeX text stdin. When stdin is not typed and is not detected as binary document data, `bon` treats it as newline-delimited file paths if every non-empty line names an existing path. Stdin path lists are expanded in place, so they can be combined with normal CLI file arguments. Piped Typst document data is materialized in a temporary directory, so project-relative local assets are not available unless the input is self-contained; piped Typst paths keep their original location and asset access. Use `bon print margins` or `bon simulate margins` to calibrate visible margins with a shared Typst sheet that draws 1 mm ticks on a 10 mm margin page and a near-edge top/bottom margin page.
+
+Use `--verbose` when diagnosing print preparation. Verbose output is written to stderr with a `[verbose]` prefix, leaving stdout available for generated paths or `--dry-run` command lines. It reports input detection, stdin expansion/materialization, selected printer, format conversion, crop/no-crop decisions, page splitting, raster/downsample settings, CUPS options, and the external commands being run or skipped by dry-run.
 
 Simulate options:
 
@@ -159,6 +162,7 @@ Simulate options:
 - `--background-tint HEX` - paper background tint as `#RRGGBB` or `RRGGBB`.
 - `--foreground-color HEX` - mockup foreground color as `#RRGGBB` or `RRGGBB`.
 - `--foreground-fade N` - mockup foreground opacity from `0.0` to `1.0`.
+- `--verbose` - explain simulation steps, relevant decisions, and external commands on stderr.
 
 Config options:
 
@@ -267,6 +271,8 @@ For each input, `bon`:
 9. Fails if any final page height exceeds `paper.max_media_height_pt`.
 10. Adds dynamic `media=Custom.<width>x<height>` unless media is already configured, and adds `ppi=<render.image_ppi>` unless explicitly overridden.
 11. Runs `lp` with the configured queue, copies, options, and final page path.
+
+With `--verbose`, these preparation decisions are reported as they happen on stderr, including exact `typst`, Ghostscript, LaTeX, `lpoptions`, and `lp` command lines. Dry-run still prints the historical raw command lines on stdout; verbose adds explanatory context on stderr.
 
 `bon simulate` uses the same effective physical paper width, automatic or configured printable width, image PPI, and crop policy when rendering mockups. PDF inputs are rasterized page-by-page through Ghostscript, PNG inputs are read directly, and JPEG inputs are rasterized through a temporary Typst wrapper so the project does not need an additional image-decoding dependency. The paper shown before and after the content comes from `[simulate] top_mm` / `[simulate] bottom_mm` or `--top-mm` / `--bottom-mm`, clamped by `[simulate] min_top_mm` / `[simulate] min_bottom_mm` to reflect the printer's physical minimum margins. The mockup paper tint comes from `[simulate] background_tint` or `--background-tint`; foreground color and opacity come from `[simulate] foreground_color` / `[simulate] foreground_fade` or their CLI flags. Multi-page PDF and Typst simulations write one mockup per page, for example `margins-page-001_<paper>mm-printout.<format>` and `margins-page-002_<paper>mm-printout.<format>` for `bon simulate margins`.
 

@@ -152,11 +152,12 @@ module Bon
     # Reads the driver-supported option keys and their allowed values from the
     # printer's PPD via `lpoptions -l`. Returns nil if the listing is
     # unavailable (so validation is skipped rather than blocking printing).
-    def self.driver_options(printer : String) : Hash(String, Array(String))?
+    def self.driver_options(printer : String, verbose : Verbose? = nil) : Hash(String, Array(String))?
       lpoptions = Process.find_executable("lpoptions")
       return nil unless lpoptions
       stdout = IO::Memory.new
       stderr = IO::Memory.new
+      verbose.try &.log("running #{Command.shell_join([lpoptions, "-p", printer, "-l"])}")
       status = Process.run(lpoptions, ["-p", printer, "-l"], output: stdout, error: stderr)
       return nil unless status.success?
       parse_driver_options(stdout.to_s)

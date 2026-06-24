@@ -287,6 +287,30 @@ describe Bon::Cli do
     end
   end
 
+  it "reports verbose simulate processing steps on stderr" do
+    with_temp_dir do |dir|
+      source = File.join(dir, "receipt.png")
+      xdg_config = File.join(dir, "xdg")
+      Bon::Simulate.write_png(source, 2, 1, Bytes[0, 0, 0, 255, 255, 255])
+
+      with_env({"XDG_CONFIG_HOME" => xdg_config}) do
+        Dir.cd(dir) do
+          stdout = IO::Memory.new
+          stderr = IO::Memory.new
+
+          status = Bon::Cli.run(["simulate", "--verbose", File.basename(source)], stdout, stderr)
+
+          status.should eq(0)
+          stdout.to_s.should contain("receipt_80mm-printout.png")
+          verbose = stderr.to_s
+          verbose.should contain("[verbose] simulating")
+          verbose.should contain("[verbose] using PNG input directly")
+          verbose.should contain("[verbose] rendering mockup PNG")
+        end
+      end
+    end
+  end
+
   it "writes simulate PNGs next to the source and prints the full generated path" do
     with_temp_dir do |dir|
       source = File.join(dir, "receipt.typ")

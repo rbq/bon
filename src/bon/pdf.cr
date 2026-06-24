@@ -67,56 +67,69 @@ module Bon
       end
     end
 
-    def self.ensure_width_policy(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.ensure_width_policy(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : String
       size = print_size(path)
       if size.width > config.paper_width_pt + CROP_EPSILON_PT
         raise Error.new("PDF width #{format_points(size.width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
       end
 
       return path if no_crop || size.width <= config.printable_width_pt + CROP_EPSILON_PT
-      crop_to_width(path, output, config.printable_width_pt, dry_run, output_io, error_io)
+      crop_to_width(path, output, config.printable_width_pt, dry_run, output_io, error_io, verbose)
     end
 
-    def self.prepare_for_print(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : PrintReady
+    def self.prepare_for_print(path : String, output : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : PrintReady
       size = print_size(path)
+      verbose.try &.log("PDF page size is #{format_points(size.width)}x#{format_points(size.height)}pt")
       if size.width > config.paper_width_pt + CROP_EPSILON_PT
         raise Error.new("PDF width #{format_points(size.width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
       end
 
-      return PrintReady.new(path, size) if no_crop || size.width <= config.printable_width_pt + CROP_EPSILON_PT
+      if no_crop
+        verbose.try &.log("using PDF page without cropping because cropping is disabled")
+        return PrintReady.new(path, size)
+      end
+      if size.width <= config.printable_width_pt + CROP_EPSILON_PT
+        verbose.try &.log("using PDF page without cropping because width fits printable area")
+        return PrintReady.new(path, size)
+      end
 
       target_size = PageSize.new(config.printable_width_pt, size.height)
-      crop_to_width(path, output, config.printable_width_pt, dry_run, output_io, error_io)
+      verbose.try &.log("center-cropping PDF width from #{format_points(size.width)}pt to #{format_points(config.printable_width_pt)}pt")
+      crop_to_width(path, output, config.printable_width_pt, dry_run, output_io, error_io, verbose)
       PrintReady.new(output, target_size)
     end
 
-    def self.prepare_pages_for_print(path : String, output_prefix : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : Array(PrintReady)
+    def self.prepare_pages_for_print(path : String, output_prefix : String, config : Config, no_crop : Bool, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : Array(PrintReady)
       sizes = page_sizes(path)
+      verbose.try &.log("PDF has #{sizes.size} page#{sizes.size == 1 ? "" : "s"}")
       max_width = sizes.max_of(&.width)
       if max_width > config.paper_width_pt + CROP_EPSILON_PT
         raise Error.new("PDF width #{format_points(max_width)}pt exceeds #{format_points(config.paper_width_pt)}pt paper width: #{path}")
       end
 
       if sizes.size == 1
-        return [prepare_for_print(path, "#{output_prefix}.pdf", config, no_crop, dry_run, output_io, error_io)]
+        return [prepare_for_print(path, "#{output_prefix}.pdf", config, no_crop, dry_run, output_io, error_io, verbose)]
       end
 
       crop = !no_crop && max_width > config.printable_width_pt + CROP_EPSILON_PT
+      verbose.try &.log(crop ? "splitting and center-cropping multi-page PDF" : "splitting multi-page PDF without cropping")
       sizes.map_with_index do |size, index|
         page_number = index + 1
         output = "#{output_prefix}-page-#{page_number.to_s.rjust(3, '0')}.pdf"
         if crop
           target_size = PageSize.new(config.printable_width_pt, size.height)
-          crop_page_to_width(path, output, config.printable_width_pt, page_number, size, dry_run, output_io, error_io)
+          verbose.try &.log("center-cropping page #{page_number} from #{format_points(size.width)}pt to #{format_points(config.printable_width_pt)}pt")
+          crop_page_to_width(path, output, config.printable_width_pt, page_number, size, dry_run, output_io, error_io, verbose)
           PrintReady.new(output, target_size)
         else
-          split_page(path, output, page_number, dry_run, output_io, error_io)
+          verbose.try &.log("extracting page #{page_number} at #{format_points(size.width)}x#{format_points(size.height)}pt")
+          split_page(path, output, page_number, dry_run, output_io, error_io, verbose)
           PrintReady.new(output, size)
         end
       end
     end
 
-    def self.crop_to_width(source : String, output : String, target_width : Float64, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.crop_to_width(source : String, output : String, target_width : Float64, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : String
       size = print_size(source)
       left_crop = (size.width - target_width) / 2.0
       gs = Command.require_executable("gs")
@@ -135,11 +148,11 @@ module Bon
         "<</PageOffset [#{format_points(-left_crop)} 0]>> setpagedevice",
         "-f",
         source,
-      ], "PDF media crop failed for #{source}", dry_run, true, output_io, error_io)
+      ], "PDF media crop failed for #{source}", dry_run, true, output_io, error_io, verbose)
       output
     end
 
-    def self.split_page(source : String, output : String, page_number : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.split_page(source : String, output : String, page_number : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : String
       gs = Command.require_executable("gs")
       Command.run([
         gs,
@@ -152,11 +165,11 @@ module Bon
         "-dLastPage=#{page_number}",
         "-sOutputFile=#{output}",
         source,
-      ], "PDF page extraction failed for #{source} page #{page_number}", dry_run, false, output_io, error_io)
+      ], "PDF page extraction failed for #{source} page #{page_number}", dry_run, false, output_io, error_io, verbose)
       output
     end
 
-    def self.crop_page_to_width(source : String, output : String, target_width : Float64, page_number : Int32, size : PageSize, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : String
+    def self.crop_page_to_width(source : String, output : String, target_width : Float64, page_number : Int32, size : PageSize, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : String
       left_crop = (size.width - target_width) / 2.0
       gs = Command.require_executable("gs")
       Command.run([
@@ -176,11 +189,11 @@ module Bon
         "<</PageOffset [#{format_points(-left_crop)} 0]>> setpagedevice",
         "-f",
         source,
-      ], "PDF media crop failed for #{source} page #{page_number}", dry_run, false, output_io, error_io)
+      ], "PDF media crop failed for #{source} page #{page_number}", dry_run, false, output_io, error_io, verbose)
       output
     end
 
-    def self.crop_to_raster(source : String, output : String, source_size : PageSize, target_size : PageSize, ppi : Int32, multiplier : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, threshold = 0.125, dither = "none") : String
+    def self.crop_to_raster(source : String, output : String, source_size : PageSize, target_size : PageSize, ppi : Int32, multiplier : Int32, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, threshold = 0.125, dither = "none", verbose : Verbose? = nil) : String
       gs = Command.require_executable("gs")
       if multiplier <= 1
         Command.run(
@@ -189,21 +202,25 @@ module Bon
           dry_run,
           true,
           output_io,
-          error_io
+          error_io,
+          verbose
         )
         return output
       end
 
       high_ppi = ppi * multiplier
       high_output = high_resolution_path(output, high_ppi)
+      verbose.try &.log("rasterizing PDF at #{high_ppi} PPI before #{multiplier}x downsample")
       Command.run(
         raster_crop_command(gs, source, high_output, source_size, target_size, high_ppi, grayscale: true),
         "PDF raster crop failed for #{source}",
         dry_run,
         true,
         output_io,
-        error_io
+        error_io,
+        verbose
       )
+      verbose.try &.log("downsampling raster by #{multiplier}x with threshold #{threshold} and #{dither} dithering") if File.exists?(high_output)
       downsample_grayscale_to_mono(high_output, output, multiplier, threshold, dither) if File.exists?(high_output)
       output
     end

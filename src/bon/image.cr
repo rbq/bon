@@ -206,8 +206,9 @@ module Bon
       raise Error.new("Could not read JPEG dimensions: #{path}")
     end
 
-    def self.wrap_as_typst_pdf(source : String, output : String, temp_dir : String, config : Config, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR) : Nil
+    def self.wrap_as_typst_pdf(source : String, output : String, temp_dir : String, config : Config, dry_run : Bool, output_io : IO = STDOUT, error_io : IO = STDERR, verbose : Verbose? = nil) : Nil
       size = page_size(source, config)
+      verbose.try &.log("creating Typst image wrapper at #{PDF.format_points(size.width)}x#{PDF.format_points(size.height)}pt")
       image_name = "source#{File.extname(source).downcase}"
       image_path = File.join(temp_dir, image_name)
       FileUtils.cp(source, image_path) unless File.expand_path(source) == File.expand_path(image_path)
@@ -217,7 +218,7 @@ module Bon
         io << "#set text(size: 0pt)\n"
         io << "#image(\"#{typst_escape(image_name)}\", width: #{PDF.format_points(size.width)}pt)\n"
       end)
-      Typst.compile(wrapper, output, temp_dir, config, dry_run, output_io, error_io)
+      Typst.compile(wrapper, output, temp_dir, config, dry_run, output_io, error_io, verbose)
     end
 
     private def self.typst_escape(path : String) : String

@@ -38,6 +38,7 @@ describe Bon::Cli do
     help.should contain("-w N, --width=N")
     help.should contain("-f TYPE, --stdin-format=TYPE")
     help.should contain("-u, --no-crop")
+    help.should contain("--verbose")
   end
 
   it "documents the simulate alias in simulate help" do
@@ -55,6 +56,7 @@ describe Bon::Cli do
     help.should contain("-w N, --width=N")
     help.should contain("-u, --no-crop")
     help.should contain("--background-tint=HEX")
+    help.should contain("--verbose")
   end
 
   it "documents web options in web help" do
@@ -419,6 +421,38 @@ describe Bon::Cli do
           output.should contain("-o TmxPaperReduction=Top")
           output.should contain("001-receipt-print.pdf")
           output.should_not contain("001-receipt-print.png")
+        end
+      end
+    end
+  end
+
+  it "reports verbose print processing steps on stderr" do
+    with_cli_temp_dir do |dir|
+      source = File.join(dir, "receipt.typ")
+      File.write(source, "#set page(width: 80mm, height: 300pt)\nHello\n")
+      install_fake_lpstat(dir)
+      install_fake_print_tools(dir)
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+
+      with_cli_env({"PATH" => "#{dir}:#{ENV["PATH"]}", "XDG_CONFIG_HOME" => File.join(dir, "xdg")}) do
+        Dir.cd(dir) do
+          status = Bon::Cli.run(["--verbose", "--dry-run", source], stdout, stderr)
+
+          status.should eq(0)
+          output = stdout.to_s
+          output.should contain("typst compile --root")
+          output.should contain("lp -d EPSON_TM_m30III -n 1")
+          verbose = stderr.to_s
+          verbose.should contain("[verbose] selected printer EPSON_TM_m30III")
+          verbose.should contain("[verbose] recognized .typ input")
+          verbose.should contain("[verbose] using Typst PDF mode")
+          verbose.should contain("[verbose] running")
+          verbose.should contain("typst compile --root")
+          verbose.should contain("[verbose] center-cropping PDF width")
+          verbose.should contain("[verbose] built CUPS options")
+          verbose.should contain("[verbose] would run")
+          verbose.should contain("lp -d EPSON_TM_m30III -n 1")
         end
       end
     end
